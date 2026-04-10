@@ -4,7 +4,7 @@ import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
 import { fullLookup } from "../dictionary/lookup";
 import { isDatabaseReady } from "../dictionary/db";
-import { resolveAudio, playAudio } from "../audio/provider";
+import { playAudio } from "../audio/provider";
 import { streamChatMessage } from "../chat/provider";
 import type { ChatMessage } from "../chat/provider";
 import type { DictionaryResult } from "../dictionary/data";
@@ -205,7 +205,7 @@ export class DictionaryView extends ItemView {
 			if (result) {
 				this.currentResult = result;
 				this.currentWord = word;
-				resultArea.innerHTML = renderResult(result, this.plugin.settings);
+				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
 
 				// Auto-play audio for Spanish words
 				if (result.word.lang === "es" && this.plugin.settings.autoPlayAudio) {
@@ -232,29 +232,18 @@ export class DictionaryView extends ItemView {
 		btn.textContent = "⏳ Loading...";
 
 		try {
-			const audio = await resolveAudio(
-				word,
-				this.currentResult.audioRefs,
-				this.plugin.settings
-			);
-
-			if (audio) {
-				const audioEl = await playAudio(audio);
-				if (audioEl) {
-					btn.textContent = "🔊 Playing";
-					audioEl.addEventListener("ended", () => {
-						btn.textContent = "🔊 Listen";
-					});
-					audioEl.addEventListener("error", () => {
-						btn.textContent = "🔊 Listen";
-					});
-				} else {
+			const audioEl = await playAudio(word);
+			if (audioEl) {
+				btn.textContent = "🔊 Playing";
+				audioEl.addEventListener("ended", () => {
 					btn.textContent = "🔊 Listen";
-					new Notice("Failed to play audio. Check your internet connection.");
-				}
+				});
+				audioEl.addEventListener("error", () => {
+					btn.textContent = "🔊 Listen";
+				});
 			} else {
-				btn.textContent = "🔇 No audio";
-				new Notice("No audio pronunciation available for this word.");
+				btn.textContent = "🔊 Listen";
+				new Notice("Failed to play audio. Check your internet connection.");
 			}
 		} catch (err) {
 			btn.textContent = "🔊 Listen";

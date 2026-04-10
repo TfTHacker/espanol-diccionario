@@ -1,16 +1,16 @@
 // src/dictionary/lookup.ts — Dictionary search & data access (EN↔ES bidirectional)
 // High-level lookup API that combines lemmatization, definition search, etc.
 
-import { lookupWord, searchWords, getDefinitions, getSentences, getAudioRefs, lemmatize, isDatabaseReady } from "./db";
+import { lookupWord, searchWords, getDefinitions, getSentences, lemmatize, isDatabaseReady } from "./db";
 import type { DictionaryResult, LookupOptions } from "./data";
 
 /**
  * Full dictionary lookup: resolves the word (including lemmatization),
- * then fetches definitions, sentences, and audio references.
+ * then fetches definitions and sentences.
  */
 export function fullLookup(word: string, options?: LookupOptions): DictionaryResult | null {
 	if (!isDatabaseReady()) {
-		console.warn("[espanol-diccionario] Database not ready for lookup");
+		console.warn("[español-diccionario] Database not ready for lookup");
 		return null;
 	}
 
@@ -43,13 +43,11 @@ export function fullLookup(word: string, options?: LookupOptions): DictionaryRes
 	// Step 3: Fetch related data
 	const definitions = getDefinitions(wordEntry.id);
 	const sentences = getSentences(wordEntry.id, maxSentences);
-	const audioRefs = getAudioRefs(wordEntry.id);
 
 	return {
 		word: wordEntry as any,
 		definitions: definitions as any,
 		sentences: sentences as any,
-		audioRefs: audioRefs as any,
 		resolvedFrom,
 	};
 }

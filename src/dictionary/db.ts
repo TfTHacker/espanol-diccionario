@@ -2,7 +2,8 @@
 // Loads dictionary.db from vault and provides query functions
 // Auto-downloads missing files (database + WASM) from GitHub releases on first run
 
-import type { WordEntry, Definition, Sentence, AudioRef, LemmaEntry } from "./data";
+import type { WordEntry, Definition, Sentence, LemmaEntry } from "./data";
+import { requestUrl } from "obsidian";
 import initSqlJs, { Database } from "sql.js";
 
 let db: Database | null = null;
@@ -90,8 +91,6 @@ async function _initDatabase(app: any, pluginDir: string): Promise<void> {
  * Uses requestUrl (Obsidian API) for cross-platform compatibility (works on mobile too).
  */
 async function downloadFile(app: any, pluginDir: string, filename: string, url: string): Promise<void> {
-	const { requestUrl } = await import("obsidian");
-
 	console.log("[español-diccionario] Downloading", url);
 	const response = await requestUrl({
 		url: url,
@@ -280,17 +279,6 @@ export function getSentences(wordId: number, limit = 5): Sentence[] {
 	return queryAll<Sentence>(
 		"SELECT * FROM sentences WHERE word_id = ? LIMIT ?",
 		[wordId, limit]
-	);
-}
-
-/**
- * Get audio references for a word
- */
-export function getAudioRefs(wordId: number): AudioRef[] {
-	if (!dbReady || !db) return [];
-	return queryAll<AudioRef>(
-		"SELECT * FROM audio_refs WHERE word_id = ? ORDER BY CASE WHEN region = 'Spain' THEN 0 WHEN region = 'Andalusia' THEN 1 ELSE 2 END",
-		[wordId]
 	);
 }
 

@@ -64,21 +64,12 @@ function buildTestDatabase() {
 			lang        TEXT NOT NULL
 		);
 
-		CREATE TABLE IF NOT EXISTS audio_refs (
-			id          INTEGER PRIMARY KEY,
-			word_id     INTEGER REFERENCES words(id),
-			filename    TEXT NOT NULL,
-			region      TEXT,
-			source      TEXT
-		);
-
 		-- Indexes for fast lookups
 		CREATE INDEX IF NOT EXISTS idx_word_lang ON words(word, lang);
 		CREATE INDEX IF NOT EXISTS idx_word_freq ON words(word, frequency);
 		CREATE INDEX IF NOT EXISTS idx_def_word ON definitions(word_id);
 		CREATE INDEX IF NOT EXISTS idx_sent_word ON sentences(word_id);
 		CREATE INDEX IF NOT EXISTS idx_lemma_inflected ON lemmas(inflected, lang);
-		CREATE INDEX IF NOT EXISTS idx_audio_word ON audio_refs(word_id);
 	`);
 
 	// Insert test data
@@ -93,9 +84,6 @@ function buildTestDatabase() {
 	);
 	const insertLemma = db.prepare(
 		"INSERT INTO lemmas (inflected, lemma, pos, lang) VALUES (?, ?, ?, ?)"
-	);
-	const insertAudio = db.prepare(
-		"INSERT INTO audio_refs (id, word_id, filename, region, source) VALUES (?, ?, ?, ?, ?)"
 	);
 
 	const transaction = db.transaction(() => {
@@ -197,12 +185,6 @@ function buildTestDatabase() {
 
 		// Plural nouns
 		insertLemma.run("casas", "casa", "noun", "es");
-
-		// === Audio references ===
-		insertAudio.run(1, 1, "Es-casa.oga", "Spain", "wikimedia");
-		insertAudio.run(2, 2, "LL-Q1321 (spa)-Rodelar-hablar.wav", "Spain", "wikimedia");
-		insertAudio.run(3, 3, "Es-hola.oga", "Spain", "wikimedia");
-		insertAudio.run(4, 5, "LL-Q1321 (spa)-Rodelar-comer.wav", "Spain", "wikimedia");
 	});
 
 	transaction();

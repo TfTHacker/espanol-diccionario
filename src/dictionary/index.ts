@@ -2,4 +2,4 @@
 
 export { fullLookup, searchDictionary } from "./lookup";
 export { initDatabase, isDatabaseReady, closeDatabase } from "./db";
-export type { WordEntry, Definition, Sentence, AudioRef, LemmaEntry, DictionaryResult, LookupOptions } from "./data";
+export type { WordEntry, Definition, Sentence, LemmaEntry, DictionaryResult, LookupOptions } from "./data";

@@ -9,7 +9,6 @@ export interface PluginSettings {
 	llmModel: string;
 	llmTemperature: number;
 	systemPrompt: string;
-	audioSource: "wikimedia-first" | "google-tts-only";
 	maxSentences: number;
 	autoPlayAudio: boolean;
 }
@@ -24,7 +23,6 @@ When the user looks up a word, provide additional context, usage notes, and exam
 sentences. Always use Spain Spanish conventions (vosotros, distinción, etc.).
 When explaining grammar, be clear and give practical examples. Respond in the same
 language the user writes in (English or Spanish).`,
-	audioSource: "wikimedia-first",
 	maxSentences: 5,
 	autoPlayAudio: false,
 };
@@ -116,20 +114,6 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 
 		// Audio settings
 		containerEl.createEl("h3", { text: "Audio" });
-
-		new Setting(containerEl)
-			.setName("Audio source")
-			.setDesc("Wikimedia recordings (Spain Spanish) with Google TTS fallback, or Google TTS only.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("wikimedia-first", "Wikimedia first, Google TTS fallback")
-					.addOption("google-tts-only", "Google TTS only")
-					.setValue(this.plugin.settings.audioSource)
-					.onChange(async (value: "wikimedia-first" | "google-tts-only") => {
-						this.plugin.settings.audioSource = value;
-						await this.plugin.saveSettings();
-					})
-			);
 
 		new Setting(containerEl)
 			.setName("Auto-play pronunciation")

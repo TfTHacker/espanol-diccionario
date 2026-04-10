@@ -1,12 +1,11 @@
 // src/ui/result-renderer.ts — Rendering dictionary results to HTML
 
 import type { DictionaryResult } from "../dictionary/data";
-import type { PluginSettings } from "../settings";
 
 /**
  * Render a full dictionary result into HTML
  */
-export function renderResult(result: DictionaryResult, settings: PluginSettings): string {
+export function renderResult(result: DictionaryResult, maxSentences: number = 5): string {
 	const { word, definitions, sentences, audioRefs, resolvedFrom } = result;
 
 	const parts: string[] = [];
@@ -28,8 +27,8 @@ export function renderResult(result: DictionaryResult, settings: PluginSettings)
 	parts.push(`<div class="ed-header">${headerParts.join(" ")}</div>`);
 
 	// Audio button (only for Spanish words)
-	if (word.lang === "es" && (audioRefs.length > 0 || settings.audioSource === "wikimedia-first")) {
-		parts.push(renderAudioButton(word.word, audioRefs));
+	if (word.lang === "es") {
+		parts.push(renderAudioButton(word.word));
 	}
 
 	// Definitions
@@ -39,7 +38,7 @@ export function renderResult(result: DictionaryResult, settings: PluginSettings)
 
 	// Example sentences
 	if (sentences.length > 0) {
-		parts.push(renderSentences(sentences));
+		parts.push(renderSentences(sentences.slice(0, maxSentences)));
 	}
 
 	return `<div class="ed-result">${parts.join("")}</div>`;
@@ -48,13 +47,11 @@ export function renderResult(result: DictionaryResult, settings: PluginSettings)
 /**
  * Render audio play button
  */
-function renderAudioButton(word: string, audioRefs: any[]): string {
-	const audioId = `ed-audio-${Date.now()}`;
+function renderAudioButton(word: string): string {
 	return `<div class="ed-audio">
 		<button class="ed-audio-btn" data-word="${escapeHtml(word)}" data-action="play-audio" title="Play pronunciation">
 			🔊 Listen
 		</button>
-		<audio id="${audioId}" preload="none"></audio>
 	</div>`;
 }
 

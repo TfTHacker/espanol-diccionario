@@ -33,19 +33,10 @@ export interface LemmaEntry {
 	lang: string;
 }
 
-export interface AudioRef {
-	id: number;
-	wordId: number;
-	filename: string;
-	region: string | null;
-	source: string | null;
-}
-
 export interface DictionaryResult {
 	word: WordEntry;
 	definitions: Definition[];
 	sentences: Sentence[];
-	audioRefs: AudioRef[];
 	/** If the user searched a conjugated/inflected form, this is the lemma it resolved to */
 	resolvedFrom?: string;
 }
