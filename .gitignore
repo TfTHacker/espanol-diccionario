@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+styles.css
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Local dev notes (not for publication)
+.local/
+
+# Obsidian plugin data (runtime)
+data.json
+data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

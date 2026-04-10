@@ -1,0 +1,34 @@
+{
+  "name": "espanol-diccionario",
+  "version": "0.1.0",
+  "description": "An Obsidian plugin for learning Spain (Castilian) Spanish with offline dictionary, audio pronunciation, and AI chat",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "build:db": "node --import tsx scripts/build-db.ts",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "spanish",
+    "dictionary",
+    "language-learning"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "obsidian": "latest",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.0",
+    "sql.js": "^1.14.1",
+    "wa-sqlite": "^1.0.0"
+  }
+}
