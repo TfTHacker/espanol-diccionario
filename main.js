@@ -2669,10 +2669,10 @@ The user just looked up the word: "${wordContext}". Use this as context for your
 
 // src/ui/result-renderer.ts
 function renderResult(result, maxSentences = 5) {
-  const { word, definitions, sentences, audioRefs, resolvedFrom } = result;
+  const { word, definitions, sentences, resolvedFrom } = result;
   const parts = [];
   if (resolvedFrom) {
-    parts.push(`<div class="ed-resolved-from">${escapeHtml(resolvedFrom)} \u2192 ${escapeHtml(word.word)}</div>`);
+    parts.push(`<div class="ed-resolved-from">${escapeHtml(resolvedFrom)} \u2192 ${makeClickable(word.word, word.lang)}</div>`);
   }
   const headerParts = [];
   headerParts.push(`<span class="ed-word">${escapeHtml(word.word)}</span>`);
@@ -2687,7 +2687,7 @@ function renderResult(result, maxSentences = 5) {
     parts.push(renderAudioButton(word.word));
   }
   if (definitions.length > 0) {
-    parts.push(renderDefinitions(definitions));
+    parts.push(renderDefinitions(definitions, word.lang));
   }
   if (sentences.length > 0) {
     parts.push(renderSentences(sentences.slice(0, maxSentences)));
@@ -2701,18 +2701,24 @@ function renderAudioButton(word) {
 		</button>
 	</div>`;
 }
-function renderDefinitions(definitions) {
+function renderDefinitions(definitions, lang) {
   const items = definitions.map((def, i) => {
     const num = def.sense_num || i + 1;
-    let html = `<span class="ed-def-num">${num}.</span> <span class="ed-def-text">${escapeHtml(def.definition)}</span>`;
+    const defHtml = lang === "en" ? makeReverseDefClickable(def.definition) : escapeHtml(def.definition);
+    let html = `<span class="ed-def-num">${num}.</span> <span class="ed-def-text">${defHtml}</span>`;
     if (def.tags) {
       try {
         const tags = JSON.parse(def.tags);
         if (Array.isArray(tags) && tags.length > 0) {
-          html += ` <span class="ed-def-tags">${tags.map((t) => escapeHtml(t)).join(", ")}</span>`;
+          const displayTags = tags.filter((t) => t !== "es" && t.length > 1);
+          if (displayTags.length > 0) {
+            html += ` <span class="ed-def-tags">${displayTags.map((t) => escapeHtml(t)).join(", ")}</span>`;
+          }
         }
       } catch {
-        html += ` <span class="ed-def-tags">${escapeHtml(def.tags)}</span>`;
+        if (def.tags !== '["es"]') {
+          html += ` <span class="ed-def-tags">${escapeHtml(def.tags)}</span>`;
+        }
       }
     }
     if (def.context) {
@@ -2725,14 +2731,23 @@ function renderDefinitions(definitions) {
 		<ol class="ed-def-list">${items}</ol>
 	</div>`;
 }
+function makeReverseDefClickable(text) {
+  const result = text.replace(
+    /\b([a-záéíóúñüÁÉÍÓÚÑÜ]+(?:[a-záéíóúñüÁÉÍÓÚÑÜ]*))\s*(?:\(([^)]*)\))?/gi,
+    (fullMatch, word, pos) => {
+      return makeClickable(word, "es") + (pos ? ` <span class="ed-def-tags">${escapeHtml(pos)}</span>` : "");
+    }
+  );
+  return result;
+}
 function renderSentences(sentences) {
   const items = sentences.map((s) => {
     let html = "";
     if (s.sentence_es) {
-      html += `<div class="ed-sentence-es">${escapeHtml(s.sentence_es)}</div>`;
+      html += `<div class="ed-sentence-es">${makeSentenceClickable(s.sentence_es, "es")}</div>`;
     }
     if (s.sentence_en) {
-      html += `<div class="ed-sentence-en">${escapeHtml(s.sentence_en)}</div>`;
+      html += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentence_en, "en")}</div>`;
     }
     return `<li class="ed-sentence-item">${html}</li>`;
   }).join("");
@@ -2740,6 +2755,17 @@ function renderSentences(sentences) {
 		<div class="ed-section-title">Example Sentences</div>
 		<ul class="ed-sentence-list">${items}</ul>
 	</div>`;
+}
+function makeClickable(word, lang) {
+  return `<span class="ed-clickable-word" data-lookup="${escapeHtml(word)}" data-lang="${escapeHtml(lang)}" title="Look up: ${escapeHtml(word)}">${escapeHtml(word)}</span>`;
+}
+function makeSentenceClickable(sentence, lang) {
+  return sentence.replace(/[a-záéíóúñüÁÉÍÓÚÑÜ]+[a-záéíóúñüÁÉÍÓÚÑÜ']*/gi, (match) => {
+    if (match.length >= 3) {
+      return makeClickable(match, lang);
+    }
+    return escapeHtml(match);
+  });
 }
 function renderNotFound(word, lang) {
   const langLabel = lang === "es" ? "Spanish" : lang === "en" ? "English" : "";
@@ -2895,6 +2921,8 @@ var DictionaryView = class extends import_obsidian3.ItemView {
       const target = evt.target;
       if (target.closest("[data-action='play-audio']")) {
         this.handlePlayAudio(target.closest("[data-action='play-audio']"));
+      } else if (target.closest(".ed-clickable-word")) {
+        this.handleWordClick(target.closest(".ed-clickable-word"));
       }
     });
     this.searchInput.focus();
@@ -2994,6 +3022,14 @@ var DictionaryView = class extends import_obsidian3.ItemView {
       btn.textContent = "\u{1F50A} Listen";
       new import_obsidian3.Notice("Failed to load audio.");
     }
+  }
+  handleWordClick(el) {
+    if (!el) return;
+    const word = el.dataset.lookup;
+    if (!word) return;
+    this.searchInput.value = word;
+    this.hideTypeahead();
+    this.doSearch();
   }
   toggleChat() {
     this.chatContainer.classList.toggle("ed-hidden");

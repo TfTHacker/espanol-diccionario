@@ -165,11 +165,13 @@ export class DictionaryView extends ItemView {
 			this.sendChat();
 		});
 
-		// Delegated click handler for audio buttons
+		// Delegated click handler for audio buttons and clickable words
 		container.addEventListener("click", (evt) => {
 			const target = evt.target as HTMLElement;
 			if (target.closest("[data-action='play-audio']")) {
 				this.handlePlayAudio(target.closest("[data-action='play-audio']") as HTMLElement);
+			} else if (target.closest(".ed-clickable-word")) {
+				this.handleWordClick(target.closest(".ed-clickable-word") as HTMLElement);
 			}
 		});
 
@@ -287,6 +289,17 @@ export class DictionaryView extends ItemView {
 			btn.textContent = "🔊 Listen";
 			new Notice("Failed to load audio.");
 		}
+	}
+
+	private handleWordClick(el: HTMLElement | null) {
+		if (!el) return;
+		const word = el.dataset.lookup;
+		if (!word) return;
+
+		// Update the search input and trigger lookup
+		this.searchInput.value = word;
+		this.hideTypeahead();
+		this.doSearch();
 	}
 
 	private toggleChat() {

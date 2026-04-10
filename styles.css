@@ -429,9 +429,32 @@
 }
 
 .ed-lang-es::after {
-	content: "🇪🇸";
+	content: "\1F1EA\1F1F8";
 }
 
 .ed-lang-en::after {
-	content: "🇬🇧";
+	content: "\1F1EC\1F1E7";
+}
+
+/* === Clickable Words === */
+.ed-clickable-word {
+	cursor: pointer;
+	color: var(--link-color);
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	text-underline-offset: 2px;
+	text-decoration-thickness: 1px;
+	transition: color 0.15s, background 0.15s;
+	border-radius: 2px;
+	padding: 0 1px;
+}
+
+.ed-clickable-word:hover {
+	color: var(--link-color-hover);
+	background: var(--background-modifier-hover);
+}
+
+/* Clickable words in definitions */
+.ed-def-text .ed-clickable-word {
+	font-weight: 500;
 }
