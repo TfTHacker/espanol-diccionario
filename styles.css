@@ -1,0 +1,437 @@
+/* Español Diccionario — Styles */
+
+/* === Main Container === */
+.espanol-diccionario {
+	padding: 12px 16px;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+/* === Search === */
+.ed-search-container {
+	margin-bottom: 12px;
+	flex-shrink: 0;
+	position: relative;
+}
+
+.ed-search-form {
+	display: flex;
+	gap: 8px;
+}
+
+.ed-search-input {
+	flex: 1;
+	padding: 8px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 14px;
+	outline: none;
+}
+
+.ed-search-input:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.ed-search-btn {
+	padding: 8px 12px;
+	border: none;
+	border-radius: 6px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	font-size: 14px;
+}
+
+.ed-search-btn:hover {
+	background: var(--interactive-accent-hover);
+}
+
+/* === Result Area === */
+.ed-result-area {
+	flex: 1;
+	overflow-y: auto;
+	min-height: 0;
+}
+
+/* === Empty / Loading States === */
+.ed-empty-state,
+.ed-loading,
+.ed-error,
+.ed-not-found {
+	text-align: center;
+	padding: 40px 20px;
+	color: var(--text-muted);
+}
+
+.ed-empty-icon {
+	font-size: 48px;
+	margin-bottom: 12px;
+}
+
+.ed-empty-text {
+	font-size: 16px;
+	margin-bottom: 6px;
+	color: var(--text-normal);
+}
+
+.ed-empty-hint {
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.ed-spinner {
+	display: inline-block;
+	width: 24px;
+	height: 24px;
+	border: 3px solid var(--background-modifier-border);
+	border-top-color: var(--interactive-accent);
+	border-radius: 50%;
+	animation: ed-spin 0.8s linear infinite;
+	margin-bottom: 12px;
+}
+
+@keyframes ed-spin {
+	to { transform: rotate(360deg); }
+}
+
+.ed-error-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--text-error);
+	margin-bottom: 8px;
+}
+
+.ed-error-msg {
+	font-size: 14px;
+	color: var(--text-muted);
+}
+
+/* === Result === */
+.ed-result {
+	line-height: 1.6;
+}
+
+.ed-resolved-from {
+	font-size: 13px;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+	font-style: italic;
+}
+
+.ed-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 10px;
+	margin-bottom: 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ed-word {
+	font-size: 24px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.ed-pos {
+	font-size: 14px;
+	color: var(--text-muted);
+	font-style: italic;
+	background: var(--background-secondary);
+	padding: 2px 8px;
+	border-radius: 4px;
+}
+
+.ed-ipa {
+	font-size: 15px;
+	color: var(--text-muted);
+	font-family: monospace;
+}
+
+/* === Audio Button === */
+.ed-audio {
+	margin-bottom: 16px;
+}
+
+.ed-audio-btn {
+	padding: 6px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 13px;
+	transition: background 0.2s, border-color 0.2s;
+}
+
+.ed-audio-btn:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+/* === Section Titles === */
+.ed-section-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin: 16px 0 8px;
+}
+
+/* === Definitions === */
+.ed-def-list {
+	list-style: none;
+	padding-left: 0;
+	margin: 0;
+}
+
+.ed-def-item {
+	padding: 4px 0;
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	line-height: 1.5;
+}
+
+.ed-def-num {
+	color: var(--text-muted);
+	font-weight: 500;
+	min-width: 20px;
+}
+
+.ed-def-text {
+	color: var(--text-normal);
+}
+
+.ed-def-tags {
+	color: var(--text-accent);
+	font-size: 12px;
+	background: var(--background-secondary);
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+.ed-def-context {
+	color: var(--text-muted);
+	font-size: 13px;
+	font-style: italic;
+}
+
+/* === Sentences === */
+.ed-sentence-list {
+	list-style: none;
+	padding-left: 0;
+	margin: 0;
+}
+
+.ed-sentence-item {
+	padding: 6px 0;
+	border-left: 3px solid var(--interactive-accent);
+	padding-left: 10px;
+	margin-bottom: 6px;
+}
+
+.ed-sentence-es {
+	color: var(--text-normal);
+	font-weight: 500;
+}
+
+.ed-sentence-en {
+	color: var(--text-muted);
+	font-size: 13px;
+}
+
+/* === Not Found === */
+.ed-not-found-word {
+	font-size: 24px;
+	font-weight: 700;
+	color: var(--text-normal);
+	margin-bottom: 8px;
+}
+
+.ed-not-found-msg {
+	font-size: 15px;
+	color: var(--text-muted);
+	margin-bottom: 4px;
+}
+
+.ed-not-found-hint {
+	font-size: 13px;
+	color: var(--text-faint);
+}
+
+/* === Chat Section === */
+.ed-chat-section {
+	flex-shrink: 0;
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 16px;
+}
+
+.ed-chat-toggle {
+	width: 100%;
+	padding: 8px;
+	border: none;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 13px;
+	text-align: left;
+	border-radius: 4px;
+}
+
+.ed-chat-toggle:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ed-hidden {
+	display: none !important;
+}
+
+.ed-chat-container {
+	max-height: 300px;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.ed-chat-messages {
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px 0;
+	max-height: 220px;
+}
+
+.ed-chat-msg {
+	padding: 6px 10px;
+	margin: 4px 0;
+	border-radius: 6px;
+	font-size: 13px;
+	line-height: 1.5;
+	max-width: 90%;
+	word-wrap: break-word;
+}
+
+.ed-chat-user {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	margin-left: auto;
+	border-bottom-right-radius: 2px;
+}
+
+.ed-chat-assistant {
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	margin-right: auto;
+	border-bottom-left-radius: 2px;
+}
+
+.ed-chat-error {
+	color: var(--text-error);
+}
+
+.ed-chat-form {
+	display: flex;
+	gap: 6px;
+	padding-top: 8px;
+}
+
+.ed-chat-input {
+	flex: 1;
+	padding: 6px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 13px;
+	outline: none;
+}
+
+.ed-chat-input:focus {
+	border-color: var(--interactive-accent);
+}
+
+.ed-chat-send-btn {
+	padding: 6px 12px;
+	border: none;
+	border-radius: 6px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.ed-chat-send-btn:hover {
+	background: var(--interactive-accent-hover);
+}
+
+/* === Typeahead / Autocomplete === */
+.ed-typeahead {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	z-index: 100;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 0 0 6px 6px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+.ed-typeahead-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	cursor: pointer;
+	font-size: 14px;
+	transition: background 0.1s;
+}
+
+.ed-typeahead-item:hover,
+.ed-typeahead-active {
+	background: var(--background-modifier-hover);
+}
+
+.ed-typeahead-word {
+	font-weight: 500;
+	color: var(--text-normal);
+}
+
+.ed-typeahead-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+.ed-typeahead-pos {
+	font-size: 12px;
+	color: var(--text-muted);
+	font-style: italic;
+	background: var(--background-secondary);
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+.ed-typeahead-flag {
+	font-size: 11px;
+	color: var(--text-faint);
+}
+
+.ed-lang-es::after {
+	content: "🇪🇸";
+}
+
+.ed-lang-en::after {
+	content: "🇬🇧";
+}

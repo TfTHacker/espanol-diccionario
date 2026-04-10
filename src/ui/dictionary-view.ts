@@ -2,7 +2,7 @@
 
 import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
-import { fullLookup } from "../dictionary/lookup";
+import { fullLookup, searchDictionary } from "../dictionary/lookup";
 import { isDatabaseReady } from "../dictionary/db";
 import { playAudio } from "../audio/provider";
 import { streamChatMessage } from "../chat/provider";
@@ -18,6 +18,10 @@ export class DictionaryView extends ItemView {
 	// Search state
 	private searchInput!: HTMLInputElement;
 	private searchTimeout: ReturnType<typeof setTimeout> | null = null;
+	private typeaheadList!: HTMLElement;
+	private typeaheadTimeout: ReturnType<typeof setTimeout> | null = null;
+	private typeaheadIndex = -1;
+	private typeaheadItems: { word: string; pos: string; lang: string }[] = [];
 
 	// Result state
 	private currentResult: DictionaryResult | null = null;
@@ -76,10 +80,44 @@ export class DictionaryView extends ItemView {
 			this.doSearch();
 		});
 
-		// Typeahead / autocomplete
+		// Typeahead dropdown
+		this.typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
+
+		// Keyboard navigation for typeahead
+		this.searchInput.addEventListener("keydown", (evt) => {
+			if (!this.typeaheadList.classList.contains("ed-hidden")) {
+				if (evt.key === "ArrowDown") {
+					evt.preventDefault();
+					this.navigateTypeahead(1);
+					return;
+				}
+				if (evt.key === "ArrowUp") {
+					evt.preventDefault();
+					this.navigateTypeahead(-1);
+					return;
+				}
+				if (evt.key === "Enter" && this.typeaheadIndex >= 0) {
+					evt.preventDefault();
+					this.selectTypeaheadItem(this.typeaheadIndex);
+					return;
+				}
+				if (evt.key === "Escape") {
+					this.hideTypeahead();
+					return;
+				}
+			}
+		});
+
+		// Hide typeahead when clicking outside
+		this.searchInput.addEventListener("blur", () => {
+			setTimeout(() => this.hideTypeahead(), 200);
+		});
+
+		// Typeahead / autocomplete on input
 		this.searchInput.addEventListener("input", () => {
 			if (this.searchTimeout) clearTimeout(this.searchTimeout);
 			this.searchTimeout = setTimeout(() => this.doSearch(), 300);
+			this.updateTypeahead();
 		});
 
 		// Result area
@@ -317,5 +355,98 @@ export class DictionaryView extends ItemView {
 		}
 
 		this.isStreaming = false;
+	}
+
+	// ============================================================
+	// Typeahead / autocomplete
+	// ============================================================
+
+	private updateTypeahead() {
+		if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);
+
+		const text = this.searchInput.value.trim();
+		if (text.length < 2) {
+			this.hideTypeahead();
+			return;
+		}
+
+		// Debounce: wait 150ms before querying
+		this.typeaheadTimeout = setTimeout(() => {
+			if (!isDatabaseReady()) return;
+
+			const results = searchDictionary(text, undefined, 10);
+			// Deduplicate by word+pos
+			const seen = new Set<string>();
+			const unique = results.filter(w => {
+				const key = `${w.word}|${w.pos}`;
+				if (seen.has(key)) return false;
+				seen.add(key);
+				return true;
+			});
+			if (unique.length === 0) {
+				this.hideTypeahead();
+				return;
+			}
+
+			this.typeaheadItems = unique.map(w => ({ word: w.word, pos: w.pos || "", lang: w.lang }));
+			this.typeaheadIndex = -1;
+
+			this.typeaheadList.empty();
+			for (let i = 0; i < this.typeaheadItems.length; i++) {
+				const item = this.typeaheadItems[i];
+				const div = this.typeaheadList.createDiv({ cls: "ed-typeahead-item" });
+				div.createSpan({ cls: "ed-typeahead-word", text: item.word });
+
+				const meta = div.createSpan({ cls: "ed-typeahead-meta" });
+				if (item.pos) meta.createSpan({ cls: "ed-typeahead-pos", text: item.pos });
+				meta.createSpan({ cls: `ed-typeahead-flag ed-lang-${item.lang}` });
+
+				div.addEventListener("mousedown", (evt) => {
+					evt.preventDefault();
+					this.selectTypeaheadItem(i);
+				});
+			}
+
+			this.typeaheadList.classList.remove("ed-hidden");
+		}, 150);
+	}
+
+	private navigateTypeahead(direction: number) {
+		const items = this.typeaheadList.querySelectorAll(".ed-typeahead-item");
+		if (items.length === 0) return;
+
+		// Remove highlight from current
+		if (this.typeaheadIndex >= 0 && this.typeaheadIndex < items.length) {
+			items[this.typeaheadIndex].classList.remove("ed-typeahead-active");
+		}
+
+		// Move index
+		this.typeaheadIndex += direction;
+		if (this.typeaheadIndex < 0) this.typeaheadIndex = items.length - 1;
+		if (this.typeaheadIndex >= items.length) this.typeaheadIndex = 0;
+
+		// Apply highlight
+		items[this.typeaheadIndex].classList.add("ed-typeahead-active");
+
+		// Update input value preview
+		const item = this.typeaheadItems[this.typeaheadIndex];
+		if (item) {
+			this.searchInput.value = item.word;
+		}
+	}
+
+	private selectTypeaheadItem(index: number) {
+		const item = this.typeaheadItems[index];
+		if (!item) return;
+
+		this.searchInput.value = item.word;
+		this.hideTypeahead();
+		this.doSearch();
+	}
+
+	private hideTypeahead() {
+		this.typeaheadList.classList.add("ed-hidden");
+		this.typeaheadIndex = -1;
+		this.typeaheadItems = [];
 	}
 }

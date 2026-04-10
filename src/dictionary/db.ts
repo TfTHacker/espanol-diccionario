@@ -254,8 +254,9 @@ export function searchWords(prefix: string, lang?: "es" | "en", limit = 20): Wor
 		);
 	}
 
+	// No lang hint: show Spanish words first, then English
 	return queryAll<WordEntry>(
-		"SELECT * FROM words WHERE word LIKE ? ORDER BY frequency ASC LIMIT ?",
+		"SELECT * FROM words WHERE word LIKE ? ORDER BY CASE WHEN lang = 'es' THEN 0 ELSE 1 END, frequency ASC LIMIT ?",
 		[normalized + "%", limit]
 	);
 }
