@@ -2441,7 +2441,7 @@ var import_obsidian5 = require("obsidian");
 var import_obsidian2 = require("obsidian");
 init_db();
 var DEFAULT_SETTINGS = {
-  llmServerUrl: "http://localhost:11434",
+  llmServerUrl: "https://api.ollama.com/v1",
   llmApiKey: "",
   llmModel: "llama3",
   llmTemperature: 0.7,
@@ -2464,8 +2464,8 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
     containerEl.empty();
     containerEl.createEl("h2", { text: "Espa\xF1ol Diccionario Settings" });
     containerEl.createEl("h3", { text: "LLM Chat" });
-    new import_obsidian2.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint (Ollama, OpenAI, Groq, Together, LM Studio, etc.)").addText(
-      (text) => text.setPlaceholder("http://localhost:11434").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
+    new import_obsidian2.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud (api.ollama.com). For local Ollama, use http://localhost:11434/v1").addText(
+      (text) => text.setPlaceholder("https://api.ollama.com/v1").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
         this.plugin.settings.llmServerUrl = value.trim();
         await this.plugin.saveSettings();
       })
@@ -2493,6 +2493,17 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
       (text) => text.setPlaceholder("You are a helpful Spanish language tutor...").setValue(this.plugin.settings.systemPrompt).onChange(async (value) => {
         this.plugin.settings.systemPrompt = value;
         await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, and system prompt to their defaults.").addButton(
+      (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
+        this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
+        this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
+        this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
+        this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
+        this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+        await this.plugin.saveSettings();
+        this.display();
       })
     );
     containerEl.createEl("h3", { text: "Audio" });
