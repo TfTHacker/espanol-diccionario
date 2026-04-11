@@ -42,6 +42,7 @@ export class DictionaryView extends ItemView {
 	private chatHistoryIndex = -1; // -1 means not navigating history
 	private chatRecentsDropdown!: HTMLElement;
 	private chatInputBeforeHistory = ""; // stores current input when navigating history
+	private chatToggleBtn!: HTMLButtonElement;
 	private isStreaming = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
@@ -96,6 +97,14 @@ export class DictionaryView extends ItemView {
 		this.recentsBtn.setText("🕐");
 		this.recentsBtn.disabled = true;
 		this.recentsBtn.addEventListener("click", () => this.toggleRecents());
+
+		// Chat toggle button
+		this.chatToggleBtn = navDiv.createEl("button", {
+			cls: "ed-nav-btn ed-chat-toggle-btn",
+			attr: { type: "button", title: "Toggle chat" },
+		});
+		this.chatToggleBtn.setText("💬");
+		this.chatToggleBtn.addEventListener("click", () => this.toggleChat());
 
 		// Recents dropdown
 		this.recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
@@ -178,14 +187,8 @@ export class DictionaryView extends ItemView {
 			</div>`;
 		}
 
-		// Chat area (collapsible)
+		// Chat area
 		const chatSection = container.createDiv({ cls: "ed-chat-section" });
-		const chatToggle = chatSection.createEl("button", {
-			cls: "ed-chat-toggle",
-			attr: { "data-action": "toggle-chat" },
-		});
-		chatToggle.setText("💬 Chat about this word");
-		chatToggle.addEventListener("click", () => this.toggleChat());
 
 		this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
 
@@ -436,12 +439,11 @@ export class DictionaryView extends ItemView {
 
 	private toggleChat() {
 		this.chatContainer.classList.toggle("ed-hidden");
-		const toggle = this.containerEl.querySelector(".ed-chat-toggle");
-		if (toggle) {
-			const isHidden = this.chatContainer.classList.contains("ed-hidden");
-			toggle.textContent = isHidden ? "💬 Chat about this word" : "💬 Hide chat";
+		const isHidden = this.chatContainer.classList.contains("ed-hidden");
+		if (this.chatToggleBtn) {
+			this.chatToggleBtn.classList.toggle("ed-nav-btn-active", !isHidden);
 		}
-		if (!this.chatContainer.classList.contains("ed-hidden")) {
+		if (!isHidden) {
 			this.updateChatModelLabel();
 			this.chatInput.focus();
 		}

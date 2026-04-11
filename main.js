@@ -3198,7 +3198,6 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     this.chatMessages = [];
     this.chatHistoryIndex = -1;
     this.chatInputBeforeHistory = "";
-    // stores current input when navigating history
     this.isStreaming = false;
     this.plugin = plugin;
   }
@@ -3240,6 +3239,12 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     this.recentsBtn.setText("\u{1F550}");
     this.recentsBtn.disabled = true;
     this.recentsBtn.addEventListener("click", () => this.toggleRecents());
+    this.chatToggleBtn = navDiv.createEl("button", {
+      cls: "ed-nav-btn ed-chat-toggle-btn",
+      attr: { type: "button", title: "Toggle chat" }
+    });
+    this.chatToggleBtn.setText("\u{1F4AC}");
+    this.chatToggleBtn.addEventListener("click", () => this.toggleChat());
     this.recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
     const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
     this.searchInput = searchForm.createEl("input", {
@@ -3304,12 +3309,6 @@ var DictionaryView = class extends import_obsidian5.ItemView {
 			</div>`;
     }
     const chatSection = container.createDiv({ cls: "ed-chat-section" });
-    const chatToggle = chatSection.createEl("button", {
-      cls: "ed-chat-toggle",
-      attr: { "data-action": "toggle-chat" }
-    });
-    chatToggle.setText("\u{1F4AC} Chat about this word");
-    chatToggle.addEventListener("click", () => this.toggleChat());
     this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
     const chatToolbar = this.chatContainer.createDiv({ cls: "ed-chat-toolbar" });
     this.chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
@@ -3512,12 +3511,11 @@ var DictionaryView = class extends import_obsidian5.ItemView {
   }
   toggleChat() {
     this.chatContainer.classList.toggle("ed-hidden");
-    const toggle = this.containerEl.querySelector(".ed-chat-toggle");
-    if (toggle) {
-      const isHidden = this.chatContainer.classList.contains("ed-hidden");
-      toggle.textContent = isHidden ? "\u{1F4AC} Chat about this word" : "\u{1F4AC} Hide chat";
+    const isHidden = this.chatContainer.classList.contains("ed-hidden");
+    if (this.chatToggleBtn) {
+      this.chatToggleBtn.classList.toggle("ed-nav-btn-active", !isHidden);
     }
-    if (!this.chatContainer.classList.contains("ed-hidden")) {
+    if (!isHidden) {
       this.updateChatModelLabel();
       this.chatInput.focus();
     }
