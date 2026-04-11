@@ -3319,6 +3319,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       this.updateTypeahead();
     });
     const resultArea = container.createDiv({ cls: "ed-result-area", attr: { id: "ed-result-area" } });
+    this.chatSuggestionsContainer = container.createDiv({ cls: "ed-suggestion-links" });
     if (!isDatabaseReady()) {
       resultArea.innerHTML = renderDbLoading();
     } else {
@@ -3339,7 +3340,6 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     clearBtn.setText("\u{1F5D1} Clear");
     clearBtn.addEventListener("click", () => this.clearChat());
     const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
-    this.chatSuggestionsContainer = this.chatContainer.createDiv({ cls: "ed-chat-suggestions" });
     const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
     this.chatInput = chatForm.createEl("input", {
       type: "text",
@@ -3478,6 +3478,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
         this.currentResult = null;
         this.currentWord = word;
         resultArea.innerHTML = renderNotFound(word);
+        this.chatSuggestionsContainer.empty();
         if (pushHistory) {
           this.pushNavHistory(word);
         }
@@ -3539,7 +3540,6 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     }
     if (!isHidden) {
       this.updateChatModelLabel();
-      this.renderChatSuggestions();
       this.chatInput.focus();
     }
   }
@@ -3583,15 +3583,27 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     const pos = word.pos || "";
     const defs = result.definitions.map((d) => d.definition).join("; ");
     const templates = this.plugin.settings.chatSuggestions;
+    const links = [];
     for (const template of templates) {
       if (!template.trim()) continue;
       const text = template.replace(/{word}/g, wordStr).replace(/{pos}/g, pos).replace(/{defs}/g, defs);
-      const chip = container.createEl("button", {
-        cls: "ed-chat-suggestion-chip",
-        attr: { type: "button" }
+      links.push(text);
+    }
+    if (links.length === 0) return;
+    container.createEl("span", { cls: "ed-suggestion-label", text: "Ask:" });
+    for (let i = 0; i < links.length; i++) {
+      if (i > 0) {
+        container.createEl("span", { cls: "ed-suggestion-sep", text: " \xB7 " });
+      }
+      const link = container.createEl("a", {
+        cls: "ed-suggestion-link",
+        text: links[i]
       });
-      chip.textContent = text;
-      chip.addEventListener("click", () => this.sendChatSuggestion(text));
+      link.href = "#";
+      link.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        this.sendChatSuggestion(links[i]);
+      });
     }
   }
   sendChatSuggestion(text) {

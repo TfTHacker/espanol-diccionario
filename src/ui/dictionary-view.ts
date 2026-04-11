@@ -177,6 +177,9 @@ export class DictionaryView extends ItemView {
 		// Result area
 		const resultArea = container.createDiv({ cls: "ed-result-area", attr: { id: "ed-result-area" } });
 
+		// Suggestion links (below definition)
+		this.chatSuggestionsContainer = container.createDiv({ cls: "ed-suggestion-links" });
+
 		// Show loading or initial state
 		if (!isDatabaseReady()) {
 			resultArea.innerHTML = renderDbLoading();
@@ -204,9 +207,6 @@ export class DictionaryView extends ItemView {
 		clearBtn.addEventListener("click", () => this.clearChat());
 
 		const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
-
-		// Suggestion chips (between messages and input)
-		this.chatSuggestionsContainer = this.chatContainer.createDiv({ cls: "ed-chat-suggestions" });
 
 		const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
 		this.chatInput = chatForm.createEl("input", {
@@ -379,6 +379,7 @@ export class DictionaryView extends ItemView {
 				this.currentResult = null;
 				this.currentWord = word;
 				resultArea.innerHTML = renderNotFound(word);
+				this.chatSuggestionsContainer.empty();
 				if (pushHistory) {
 					this.pushNavHistory(word);
 				}
@@ -452,7 +453,6 @@ export class DictionaryView extends ItemView {
 		}
 		if (!isHidden) {
 			this.updateChatModelLabel();
-			this.renderChatSuggestions();
 			this.chatInput.focus();
 		}
 	}
@@ -507,18 +507,34 @@ export class DictionaryView extends ItemView {
 		const defs = result.definitions.map(d => d.definition).join("; ");
 
 		const templates = this.plugin.settings.chatSuggestions;
+		const links: string[] = [];
+
 		for (const template of templates) {
 			if (!template.trim()) continue;
 			const text = template
 				.replace(/{word}/g, wordStr)
 				.replace(/{pos}/g, pos)
 				.replace(/{defs}/g, defs);
-			const chip = container.createEl("button", {
-				cls: "ed-chat-suggestion-chip",
-				attr: { type: "button" },
+			links.push(text);
+		}
+
+		if (links.length === 0) return;
+
+		container.createEl("span", { cls: "ed-suggestion-label", text: "Ask:" });
+
+		for (let i = 0; i < links.length; i++) {
+			if (i > 0) {
+				container.createEl("span", { cls: "ed-suggestion-sep", text: " · " });
+			}
+			const link = container.createEl("a", {
+				cls: "ed-suggestion-link",
+				text: links[i],
 			});
-			chip.textContent = text;
-			chip.addEventListener("click", () => this.sendChatSuggestion(text));
+			link.href = "#";
+			link.addEventListener("click", (evt) => {
+				evt.preventDefault();
+				this.sendChatSuggestion(links[i]);
+			});
 		}
 	}
 
