@@ -1,6 +1,8 @@
 // src/chat/provider.ts — OpenAI-compatible chat API integration
 // Supports Ollama, OpenAI, Groq, Together, and any /v1/chat/completions endpoint
+// Uses requestUrl for non-streaming (CORS-safe), fetch for streaming with fallback
 
+import { requestUrl, Platform } from "obsidian";
 import type { PluginSettings } from "../settings";
 import { getSystemPrompt } from "./prompts";
 
@@ -15,8 +17,42 @@ export interface ChatResponse {
 }
 
 /**
- * Send a message to the LLM and get a response.
- * Uses the OpenAI-compatible chat completions API.
+ * Build the full API URL from the user's server URL setting.
+ * Handles common patterns:
+ *   - "http://localhost:11434" (local Ollama → /api/chat)
+ *   - "https://api.ollama.com" or "https://api.ollama.com/v1" (cloud → /v1/chat/completions)
+ *   - "https://api.openai.com/v1" (OpenAI → /v1/chat/completions)
+ *   - "https://api.groq.com/openai/v1" (Groq → /openai/v1/chat/completions)
+ * 
+ * Avoids double-path bugs like "/v1/v1/chat/completions".
+ */
+function buildApiUrl(serverUrl: string): { url: string; isOllama: boolean } {
+	const base = serverUrl.replace(/\/+$/, "");
+	const isOllama = base.includes("localhost:11434") || base.includes("127.0.0.1:11434");
+
+	// If the URL already ends with a full chat/completions path, use as-is
+	if (base.endsWith("/chat/completions") || base.endsWith("/api/chat")) {
+		return { url: base, isOllama };
+	}
+
+	if (isOllama) {
+		// Local Ollama uses its own /api/chat endpoint
+		return { url: `${base}/api/chat`, isOllama };
+	}
+
+	// OpenAI-compatible services
+	// If URL already ends with /v1 or similar versioned path, just append /chat/completions
+	if (/\/v?\d+$/.test(base)) {
+		return { url: `${base}/chat/completions`, isOllama };
+	}
+
+	// Otherwise append the full /v1/chat/completions path
+	return { url: `${base}/v1/chat/completions`, isOllama };
+}
+
+/**
+ * Send a message to the LLM and get a response (non-streaming).
+ * Uses Obsidian's requestUrl for cross-platform / CORS compatibility.
  */
 export async function sendChatMessage(
 	messages: ChatMessage[],
@@ -36,16 +72,7 @@ export async function sendChatMessage(
 		...messages,
 	];
 
-	// Construct the API URL
-	// Ollama uses /api/chat, OpenAI-compatible uses /v1/chat/completions
-	let apiUrl = llmServerUrl.replace(/\/+$/, "");
-	const isOllama = apiUrl.includes("localhost:11434") || apiUrl.includes("127.0.0.1:11434");
-
-	if (isOllama) {
-		apiUrl += "/api/chat";
-	} else {
-		apiUrl += "/v1/chat/completions";
-	}
+	const { url: apiUrl, isOllama } = buildApiUrl(llmServerUrl);
 
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
@@ -72,21 +99,22 @@ export async function sendChatMessage(
 		});
 
 	try {
-		const response = await fetch(apiUrl, {
+		const response = await requestUrl({
+			url: apiUrl,
 			method: "POST",
 			headers,
 			body,
 		});
 
-		if (!response.ok) {
-			const errorText = await response.text();
+		if (response.status >= 400) {
+			const errorText = typeof response.text === "string" ? response.text : JSON.stringify(response.json);
 			return {
 				message: "",
 				error: `API error (${response.status}): ${errorText}`,
 			};
 		}
 
-		const data = await response.json();
+		const data = response.json;
 
 		if (isOllama) {
 			// Ollama /api/chat response format
@@ -100,18 +128,60 @@ export async function sendChatMessage(
 			};
 		}
 	} catch (err) {
+		const errMsg = err instanceof Error ? err.message : String(err);
 		return {
 			message: "",
-			error: `Connection error: ${err instanceof Error ? err.message : String(err)}. Make sure your LLM server is running at ${llmServerUrl}`,
+			error: `Connection error: ${errMsg}. Make sure your LLM server is reachable at ${llmServerUrl}`,
 		};
 	}
 }
 
 /**
- * Stream a chat response. Calls onChunk for each text fragment received.
- * Falls back to non-streaming if the server doesn't support streaming.
+ * Stream a chat response. On mobile, uses requestUrl (non-streaming).
+ * On desktop, tries fetch streaming first, falls back to requestUrl on failure.
  */
 export async function streamChatMessage(
+	messages: ChatMessage[],
+	settings: PluginSettings,
+	onChunk: (text: string) => void,
+	wordContext?: string
+): Promise<ChatResponse> {
+	// On mobile, use requestUrl (non-streaming) since fetch has CORS issues
+	if (Platform.isMobile) {
+		const response = await sendChatMessage(messages, settings, wordContext);
+		if (response.message) {
+			onChunk(response.message);
+		}
+		return response;
+	}
+
+	// On desktop, try streaming with fetch, fall back to requestUrl on failure
+	try {
+		const response = await streamWithFetch(messages, settings, onChunk, wordContext);
+		if (response.error) {
+			// Streaming returned an error (API error, not connection error)
+			// Fall back to requestUrl
+			const fallback = await sendChatMessage(messages, settings, wordContext);
+			if (fallback.message) {
+				onChunk(fallback.message);
+			}
+			return fallback;
+		}
+		return response;
+	} catch {
+		// Streaming with fetch failed — fall back to non-streaming via requestUrl
+		const response = await sendChatMessage(messages, settings, wordContext);
+		if (response.message) {
+			onChunk(response.message);
+		}
+		return response;
+	}
+}
+
+/**
+ * Internal: stream using fetch (desktop Electron only).
+ */
+async function streamWithFetch(
 	messages: ChatMessage[],
 	settings: PluginSettings,
 	onChunk: (text: string) => void,
@@ -129,14 +199,7 @@ export async function streamChatMessage(
 		...messages,
 	];
 
-	let apiUrl = llmServerUrl.replace(/\/+$/, "");
-	const isOllama = apiUrl.includes("localhost:11434") || apiUrl.includes("127.0.0.1:11434");
-
-	if (isOllama) {
-		apiUrl += "/api/chat";
-	} else {
-		apiUrl += "/v1/chat/completions";
-	}
+	const { url: apiUrl, isOllama } = buildApiUrl(llmServerUrl);
 
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
@@ -251,9 +314,7 @@ export async function streamChatMessage(
 
 		return { message: fullMessage };
 	} catch (err) {
-		return {
-			message: "",
-			error: `Connection error: ${err instanceof Error ? err.message : String(err)}. Make sure your LLM server is running at ${llmServerUrl}`,
-		};
+		// Throw so streamChatMessage can fall back to requestUrl
+		throw new Error(`Streaming failed: ${err instanceof Error ? err.message : String(err)}`);
 	}
 }

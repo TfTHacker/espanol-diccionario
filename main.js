@@ -2435,15 +2435,15 @@ __export(main_exports, {
   default: () => Espa\u00F1olDiccionarioPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian2 = require("obsidian");
 init_db();
 var DEFAULT_SETTINGS = {
-  llmServerUrl: "https://api.ollama.com/v1",
+  llmServerUrl: "https://ollama.com",
   llmApiKey: "",
-  llmModel: "llama3",
+  llmModel: "gemma3:4b",
   llmTemperature: 0.7,
   systemPrompt: `You are a helpful Spanish language tutor specializing in Castilian (Spain) Spanish.
 When the user looks up a word, provide additional context, usage notes, and example
@@ -2464,8 +2464,8 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
     containerEl.empty();
     containerEl.createEl("h2", { text: "Espa\xF1ol Diccionario Settings" });
     containerEl.createEl("h3", { text: "LLM Chat" });
-    new import_obsidian2.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud (api.ollama.com). For local Ollama, use http://localhost:11434/v1").addText(
-      (text) => text.setPlaceholder("https://api.ollama.com/v1").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
+    new import_obsidian2.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud. For local Ollama use http://localhost:11434. For OpenAI use https://api.openai.com/v1.").addText(
+      (text) => text.setPlaceholder("https://ollama.com").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
         this.plugin.settings.llmServerUrl = value.trim();
         await this.plugin.saveSettings();
       })
@@ -2477,8 +2477,8 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
       });
       text.inputEl.type = "password";
     });
-    new import_obsidian2.Setting(containerEl).setName("Model").setDesc("Model name as recognized by your LLM server (e.g., llama3, gpt-4o-mini, etc.)").addText(
-      (text) => text.setPlaceholder("llama3").setValue(this.plugin.settings.llmModel).onChange(async (value) => {
+    new import_obsidian2.Setting(containerEl).setName("Model").setDesc("Model name as recognized by your LLM server (e.g., gemma3:4b, llama3, gpt-4o-mini, etc.)").addText(
+      (text) => text.setPlaceholder("gemma3:4b").setValue(this.plugin.settings.llmModel).onChange(async (value) => {
         this.plugin.settings.llmModel = value.trim();
         await this.plugin.saveSettings();
       })
@@ -2559,7 +2559,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
 };
 
 // src/ui/dictionary-view.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/dictionary/lookup.ts
 init_db();
@@ -2645,7 +2645,22 @@ async function playAudio(word) {
 }
 
 // src/chat/provider.ts
-async function streamChatMessage(messages, settings, onChunk, wordContext) {
+var import_obsidian3 = require("obsidian");
+function buildApiUrl(serverUrl) {
+  const base = serverUrl.replace(/\/+$/, "");
+  const isOllama = base.includes("localhost:11434") || base.includes("127.0.0.1:11434");
+  if (base.endsWith("/chat/completions") || base.endsWith("/api/chat")) {
+    return { url: base, isOllama };
+  }
+  if (isOllama) {
+    return { url: `${base}/api/chat`, isOllama };
+  }
+  if (/\/v?\d+$/.test(base)) {
+    return { url: `${base}/chat/completions`, isOllama };
+  }
+  return { url: `${base}/v1/chat/completions`, isOllama };
+}
+async function sendChatMessage(messages, settings, wordContext) {
   const { llmServerUrl, llmApiKey, llmModel, llmTemperature, systemPrompt } = settings;
   const fullMessages = [
     {
@@ -2656,13 +2671,96 @@ The user just looked up the word: "${wordContext}". Use this as context for your
     },
     ...messages
   ];
-  let apiUrl = llmServerUrl.replace(/\/+$/, "");
-  const isOllama = apiUrl.includes("localhost:11434") || apiUrl.includes("127.0.0.1:11434");
-  if (isOllama) {
-    apiUrl += "/api/chat";
-  } else {
-    apiUrl += "/v1/chat/completions";
+  const { url: apiUrl, isOllama } = buildApiUrl(llmServerUrl);
+  const headers = {
+    "Content-Type": "application/json"
+  };
+  if (llmApiKey) {
+    headers["Authorization"] = `Bearer ${llmApiKey}`;
   }
+  const body = isOllama ? JSON.stringify({
+    model: llmModel,
+    messages: fullMessages,
+    stream: false,
+    options: {
+      temperature: llmTemperature
+    }
+  }) : JSON.stringify({
+    model: llmModel,
+    messages: fullMessages,
+    temperature: llmTemperature,
+    stream: false
+  });
+  try {
+    const response = await (0, import_obsidian3.requestUrl)({
+      url: apiUrl,
+      method: "POST",
+      headers,
+      body
+    });
+    if (response.status >= 400) {
+      const errorText = typeof response.text === "string" ? response.text : JSON.stringify(response.json);
+      return {
+        message: "",
+        error: `API error (${response.status}): ${errorText}`
+      };
+    }
+    const data = response.json;
+    if (isOllama) {
+      return {
+        message: data.message?.content || ""
+      };
+    } else {
+      return {
+        message: data.choices?.[0]?.message?.content || ""
+      };
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return {
+      message: "",
+      error: `Connection error: ${errMsg}. Make sure your LLM server is reachable at ${llmServerUrl}`
+    };
+  }
+}
+async function streamChatMessage(messages, settings, onChunk, wordContext) {
+  if (import_obsidian3.Platform.isMobile) {
+    const response = await sendChatMessage(messages, settings, wordContext);
+    if (response.message) {
+      onChunk(response.message);
+    }
+    return response;
+  }
+  try {
+    const response = await streamWithFetch(messages, settings, onChunk, wordContext);
+    if (response.error) {
+      const fallback = await sendChatMessage(messages, settings, wordContext);
+      if (fallback.message) {
+        onChunk(fallback.message);
+      }
+      return fallback;
+    }
+    return response;
+  } catch {
+    const response = await sendChatMessage(messages, settings, wordContext);
+    if (response.message) {
+      onChunk(response.message);
+    }
+    return response;
+  }
+}
+async function streamWithFetch(messages, settings, onChunk, wordContext) {
+  const { llmServerUrl, llmApiKey, llmModel, llmTemperature, systemPrompt } = settings;
+  const fullMessages = [
+    {
+      role: "system",
+      content: wordContext ? `${systemPrompt}
+
+The user just looked up the word: "${wordContext}". Use this as context for your response.` : systemPrompt
+    },
+    ...messages
+  ];
+  const { url: apiUrl, isOllama } = buildApiUrl(llmServerUrl);
   const headers = {
     "Content-Type": "application/json"
   };
@@ -2754,10 +2852,7 @@ The user just looked up the word: "${wordContext}". Use this as context for your
     }
     return { message: fullMessage };
   } catch (err) {
-    return {
-      message: "",
-      error: `Connection error: ${err instanceof Error ? err.message : String(err)}. Make sure your LLM server is running at ${llmServerUrl}`
-    };
+    throw new Error(`Streaming failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -2943,7 +3038,7 @@ function escapeHtml(text) {
 
 // src/ui/dictionary-view.ts
 var VIEW_TYPE_ESPANOL_DICCIONARIO = "espanol-diccionario-view";
-var DictionaryView = class extends import_obsidian3.ItemView {
+var DictionaryView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.searchTimeout = null;
@@ -3214,11 +3309,11 @@ var DictionaryView = class extends import_obsidian3.ItemView {
         });
       } else {
         btn.textContent = "\u{1F50A} Listen";
-        new import_obsidian3.Notice("Failed to play audio. Check your internet connection.");
+        new import_obsidian4.Notice("Failed to play audio. Check your internet connection.");
       }
     } catch (err) {
       btn.textContent = "\u{1F50A} Listen";
-      new import_obsidian3.Notice("Failed to load audio.");
+      new import_obsidian4.Notice("Failed to load audio.");
     }
   }
   handleWordClick(el) {
@@ -3234,7 +3329,7 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     const url = el.dataset.url;
     const title = el.dataset.title;
     if (!url) return;
-    if (import_obsidian3.Platform.isMobile) {
+    if (import_obsidian4.Platform.isMobile) {
       window.open(url, "_blank");
       return;
     }
@@ -3453,9 +3548,9 @@ var DictionaryView = class extends import_obsidian3.ItemView {
 };
 
 // src/ui/web-view.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 var VIEW_TYPE_WEB = "espanol-diccionario-web";
-var WebView = class extends import_obsidian4.ItemView {
+var WebView = class extends import_obsidian5.ItemView {
   constructor(leaf) {
     super(leaf);
     this.url = "";
@@ -3548,7 +3643,7 @@ var WebView = class extends import_obsidian4.ItemView {
 
 // src/main.ts
 init_db();
-var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian5.Plugin {
+var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian6.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -3558,7 +3653,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian5.Plugin {
     this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
       return new DictionaryView(leaf, this);
     });
-    if (!import_obsidian5.Platform.isMobile) {
+    if (!import_obsidian6.Platform.isMobile) {
       this.registerView(VIEW_TYPE_WEB, (leaf) => {
         return new WebView(leaf);
       });
@@ -3639,7 +3734,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian5.Plugin {
           leaf.view.notifyDatabaseReady();
         }
       }
-      new import_obsidian5.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
+      new import_obsidian6.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
     } catch (err) {
       console.error("[espanol-diccionario] Database init failed:", err);
       const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO);
@@ -3650,7 +3745,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian5.Plugin {
           );
         }
       }
-      new import_obsidian5.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
+      new import_obsidian6.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
     }
   }
   /**

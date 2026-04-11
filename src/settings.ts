@@ -16,9 +16,9 @@ export interface PluginSettings {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
-	llmServerUrl: "https://api.ollama.com/v1",
+	llmServerUrl: "https://ollama.com",
 	llmApiKey: "",
-	llmModel: "llama3",
+	llmModel: "gemma3:4b",
 	llmTemperature: 0.7,
 	systemPrompt: `You are a helpful Spanish language tutor specializing in Castilian (Spain) Spanish.
 When the user looks up a word, provide additional context, usage notes, and example
@@ -49,10 +49,10 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("LLM Server URL")
-			.setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud (api.ollama.com). For local Ollama, use http://localhost:11434/v1")
+			.setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud. For local Ollama use http://localhost:11434. For OpenAI use https://api.openai.com/v1.")
 			.addText((text) =>
 				text
-					.setPlaceholder("https://api.ollama.com/v1")
+					.setPlaceholder("https://ollama.com")
 					.setValue(this.plugin.settings.llmServerUrl)
 					.onChange(async (value) => {
 						this.plugin.settings.llmServerUrl = value.trim();
@@ -77,10 +77,10 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Model")
-			.setDesc("Model name as recognized by your LLM server (e.g., llama3, gpt-4o-mini, etc.)")
+			.setDesc("Model name as recognized by your LLM server (e.g., gemma3:4b, llama3, gpt-4o-mini, etc.)")
 			.addText((text) =>
 				text
-					.setPlaceholder("llama3")
+					.setPlaceholder("gemma3:4b")
 					.setValue(this.plugin.settings.llmModel)
 					.onChange(async (value) => {
 						this.plugin.settings.llmModel = value.trim();
