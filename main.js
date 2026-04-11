@@ -2435,7 +2435,7 @@ __export(main_exports, {
   default: () => Espa\u00F1olDiccionarioPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian2 = require("obsidian");
@@ -2820,7 +2820,7 @@ function renderExternalLinks(word, lang) {
   const links = EXTERNAL_SITES.map((site) => {
     if (site.key === "rae" && lang !== "es") return "";
     const href = site.url(word, lang);
-    return `<a class="ed-ext-link ed-ext-${site.key}" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="${site.label}">${site.icon}</a>`;
+    return `<a class="ed-ext-link ed-ext-${site.key}" data-url="${escapeHtml(href)}" data-title="${escapeHtml(site.label)}" title="${site.label}" role="button" tabindex="0">${site.icon}</a>`;
   }).filter(Boolean).join("");
   return `<div class="ed-ext-links">${links}</div>`;
 }
@@ -3085,6 +3085,8 @@ var DictionaryView = class extends import_obsidian3.ItemView {
         this.handlePlayAudio(target.closest("[data-action='play-audio']"));
       } else if (target.closest(".ed-clickable-word")) {
         this.handleWordClick(target.closest(".ed-clickable-word"));
+      } else if (target.closest(".ed-ext-link")) {
+        this.handleExtLink(target.closest(".ed-ext-link"));
       }
     });
     this.searchInput.focus();
@@ -3213,6 +3215,13 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     this.searchInput.value = word;
     this.hideTypeahead();
     this.doLookup(word, true);
+  }
+  handleExtLink(el) {
+    if (!el) return;
+    const url = el.dataset.url;
+    const title = el.dataset.title;
+    if (!url) return;
+    this.plugin.openWebView(url, title);
   }
   toggleChat() {
     this.chatContainer.classList.toggle("ed-hidden");
@@ -3410,9 +3419,103 @@ var DictionaryView = class extends import_obsidian3.ItemView {
   }
 };
 
+// src/ui/web-view.ts
+var import_obsidian4 = require("obsidian");
+var VIEW_TYPE_WEB = "espanol-diccionario-web";
+var WebView = class extends import_obsidian4.ItemView {
+  constructor(leaf) {
+    super(leaf);
+    this.url = "";
+    this.titleText = "";
+    this.webviewEl = null;
+  }
+  getViewType() {
+    return VIEW_TYPE_WEB;
+  }
+  getDisplayText() {
+    return this.titleText || "Web View";
+  }
+  getIcon() {
+    return "globe";
+  }
+  async onOpen() {
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.classList.add("ed-web-container");
+    if (this.url) {
+      this.loadUrl(this.url, this.titleText);
+    }
+  }
+  async onClose() {
+    if (this.webviewEl) {
+      this.webviewEl.remove();
+      this.webviewEl = null;
+    }
+  }
+  /**
+   * Load a URL in the embedded webview
+   */
+  loadUrl(url, title) {
+    this.url = url;
+    this.titleText = title || "Web View";
+    const container = this.containerEl.children[1];
+    container.empty();
+    const navBar = container.createDiv({ cls: "ed-web-nav" });
+    const backBtn = navBar.createEl("button", { cls: "ed-web-nav-btn", attr: { title: "Back" } });
+    backBtn.setText("\u2190");
+    const forwardBtn = navBar.createEl("button", { cls: "ed-web-nav-btn", attr: { title: "Forward" } });
+    forwardBtn.setText("\u2192");
+    const refreshBtn = navBar.createEl("button", { cls: "ed-web-nav-btn", attr: { title: "Refresh" } });
+    refreshBtn.setText("\u27F3");
+    const urlDisplay = navBar.createDiv({ cls: "ed-web-url", attr: { title: url } });
+    urlDisplay.setText(new URL(url).hostname);
+    const openExtBtn = navBar.createEl("button", { cls: "ed-web-nav-btn ed-web-open-ext", attr: { title: "Open in browser" } });
+    openExtBtn.setText("\u2934");
+    const webview = document.createElement("webview");
+    webview.src = url;
+    webview.setAttribute("allowpopups", "true");
+    webview.addClass("ed-webview");
+    container.appendChild(webview);
+    this.webviewEl = webview;
+    backBtn.addEventListener("click", () => {
+      if (webview.canGoBack()) webview.goBack();
+    });
+    forwardBtn.addEventListener("click", () => {
+      if (webview.canGoForward()) webview.goForward();
+    });
+    refreshBtn.addEventListener("click", () => {
+      webview.reload();
+    });
+    openExtBtn.addEventListener("click", () => {
+      window.require("electron").shell.openExternal(url);
+    });
+    webview.addEventListener("did-navigate", (evt) => {
+      try {
+        urlDisplay.setText(new URL(evt.url).hostname);
+        urlDisplay.setAttribute("title", evt.url);
+      } catch {
+        urlDisplay.setText(evt.url);
+      }
+    });
+    webview.addEventListener("did-navigate-in-page", (evt) => {
+      try {
+        urlDisplay.setText(new URL(evt.url).hostname);
+        urlDisplay.setAttribute("title", evt.url);
+      } catch {
+      }
+    });
+    webview.addEventListener("did-start-loading", () => {
+      urlDisplay.addClass("ed-web-loading");
+    });
+    webview.addEventListener("did-stop-loading", () => {
+      urlDisplay.removeClass("ed-web-loading");
+    });
+  }
+};
+
 // src/main.ts
 init_db();
-var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian4.Plugin {
+var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -3421,6 +3524,9 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian4.Plugin {
     await this.loadSettings();
     this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
       return new DictionaryView(leaf, this);
+    });
+    this.registerView(VIEW_TYPE_WEB, (leaf) => {
+      return new WebView(leaf);
     });
     this.addRibbonIcon("book-open", "Espa\xF1ol Diccionario", () => {
       this.activateView();
@@ -3466,6 +3572,25 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian4.Plugin {
     }
   }
   /**
+   * Open a URL in the embedded web viewer leaf
+   */
+  async openWebView(url, title) {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_WEB)[0];
+    if (!leaf) {
+      leaf = workspace.getLeaf("tab");
+    }
+    await leaf.setViewState({
+      type: VIEW_TYPE_WEB,
+      state: { url, title: title || "Web View" },
+      active: true
+    });
+    workspace.revealLeaf(leaf);
+    if (leaf.view instanceof WebView) {
+      leaf.view.loadUrl(url, title);
+    }
+  }
+  /**
    * Initialize the database asynchronously.
    * Notifies the view when ready or on error.
    */
@@ -3479,7 +3604,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian4.Plugin {
           leaf.view.notifyDatabaseReady();
         }
       }
-      new import_obsidian4.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
+      new import_obsidian5.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
     } catch (err) {
       console.error("[espanol-diccionario] Database init failed:", err);
       const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO);
@@ -3490,7 +3615,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian4.Plugin {
           );
         }
       }
-      new import_obsidian4.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
+      new import_obsidian5.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
     }
   }
   /**

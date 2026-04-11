@@ -104,7 +104,7 @@ function renderExternalLinks(word: string, lang: string): string {
 		// RAE only makes sense for Spanish words
 		if (site.key === "rae" && lang !== "es") return "";
 		const href = site.url(word, lang);
-		return `<a class="ed-ext-link ed-ext-${site.key}" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="${site.label}">${site.icon}</a>`;
+		return `<a class="ed-ext-link ed-ext-${site.key}" data-url="${escapeHtml(href)}" data-title="${escapeHtml(site.label)}" title="${site.label}" role="button" tabindex="0">${site.icon}</a>`;
 	}).filter(Boolean).join("");
 
 	return `<div class="ed-ext-links">${links}</div>`;

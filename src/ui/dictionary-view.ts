@@ -216,6 +216,8 @@ export class DictionaryView extends ItemView {
 				this.handlePlayAudio(target.closest("[data-action='play-audio']") as HTMLElement);
 			} else if (target.closest(".ed-clickable-word")) {
 				this.handleWordClick(target.closest(".ed-clickable-word") as HTMLElement);
+			} else if (target.closest(".ed-ext-link")) {
+				this.handleExtLink(target.closest(".ed-ext-link") as HTMLElement);
 			}
 		});
 
@@ -369,6 +371,15 @@ export class DictionaryView extends ItemView {
 		this.searchInput.value = word;
 		this.hideTypeahead();
 		this.doLookup(word, true);
+	}
+
+	private handleExtLink(el: HTMLElement | null) {
+		if (!el) return;
+		const url = el.dataset.url;
+		const title = el.dataset.title;
+		if (!url) return;
+
+		this.plugin.openWebView(url, title);
 	}
 
 	private toggleChat() {
