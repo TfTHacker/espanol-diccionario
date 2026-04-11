@@ -137,8 +137,8 @@ export async function sendChatMessage(
 }
 
 /**
- * Stream a chat response. On mobile, uses requestUrl (non-streaming).
- * On desktop, tries fetch streaming first, falls back to requestUrl on failure.
+ * Stream a chat response. Uses requestUrl (non-streaming) for reliability.
+ * On desktop with local Ollama, tries fetch streaming for real-time token display.
  */
 export async function streamChatMessage(
 	messages: ChatMessage[],
@@ -146,36 +146,27 @@ export async function streamChatMessage(
 	onChunk: (text: string) => void,
 	wordContext?: string
 ): Promise<ChatResponse> {
-	// On mobile, use requestUrl (non-streaming) since fetch has CORS issues
-	if (Platform.isMobile) {
-		const response = await sendChatMessage(messages, settings, wordContext);
-		if (response.message) {
-			onChunk(response.message);
+	const { llmServerUrl } = settings;
+	const isLocalOllama = llmServerUrl.includes("localhost:11434") || llmServerUrl.includes("127.0.0.1:11434");
+
+	// Try streaming with fetch only for local Ollama (no CORS issues)
+	if (isLocalOllama && !Platform.isMobile) {
+		try {
+			const response = await streamWithFetch(messages, settings, onChunk, wordContext);
+			if (!response.error) {
+				return response;
+			}
+		} catch {
+			// Streaming failed, fall through to requestUrl
 		}
-		return response;
 	}
 
-	// On desktop, try streaming with fetch, fall back to requestUrl on failure
-	try {
-		const response = await streamWithFetch(messages, settings, onChunk, wordContext);
-		if (response.error) {
-			// Streaming returned an error (API error, not connection error)
-			// Fall back to requestUrl
-			const fallback = await sendChatMessage(messages, settings, wordContext);
-			if (fallback.message) {
-				onChunk(fallback.message);
-			}
-			return fallback;
-		}
-		return response;
-	} catch {
-		// Streaming with fetch failed — fall back to non-streaming via requestUrl
-		const response = await sendChatMessage(messages, settings, wordContext);
-		if (response.message) {
-			onChunk(response.message);
-		}
-		return response;
+	// Use requestUrl (reliable, CORS-safe)
+	const response = await sendChatMessage(messages, settings, wordContext);
+	if (response.message) {
+		onChunk(response.message);
 	}
+	return response;
 }
 
 /**

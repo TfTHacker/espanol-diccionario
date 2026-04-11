@@ -2874,30 +2874,22 @@ The user just looked up the word: "${wordContext}". Use this as context for your
   }
 }
 async function streamChatMessage(messages, settings, onChunk, wordContext) {
-  if (import_obsidian4.Platform.isMobile) {
-    const response = await sendChatMessage(messages, settings, wordContext);
-    if (response.message) {
-      onChunk(response.message);
-    }
-    return response;
-  }
-  try {
-    const response = await streamWithFetch(messages, settings, onChunk, wordContext);
-    if (response.error) {
-      const fallback = await sendChatMessage(messages, settings, wordContext);
-      if (fallback.message) {
-        onChunk(fallback.message);
+  const { llmServerUrl } = settings;
+  const isLocalOllama = llmServerUrl.includes("localhost:11434") || llmServerUrl.includes("127.0.0.1:11434");
+  if (isLocalOllama && !import_obsidian4.Platform.isMobile) {
+    try {
+      const response2 = await streamWithFetch(messages, settings, onChunk, wordContext);
+      if (!response2.error) {
+        return response2;
       }
-      return fallback;
+    } catch {
     }
-    return response;
-  } catch {
-    const response = await sendChatMessage(messages, settings, wordContext);
-    if (response.message) {
-      onChunk(response.message);
-    }
-    return response;
   }
+  const response = await sendChatMessage(messages, settings, wordContext);
+  if (response.message) {
+    onChunk(response.message);
+  }
+  return response;
 }
 async function streamWithFetch(messages, settings, onChunk, wordContext) {
   const { llmServerUrl, llmApiKey, llmModel, llmTemperature, systemPrompt } = settings;
