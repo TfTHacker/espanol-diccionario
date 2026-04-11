@@ -4,7 +4,6 @@
 
 import { requestUrl, Platform } from "obsidian";
 import type { PluginSettings } from "../settings";
-import { getSystemPrompt } from "./prompts";
 
 export interface ChatMessage {
 	role: "system" | "user" | "assistant";

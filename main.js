@@ -4092,7 +4092,6 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
           leaf.view.notifyDatabaseReady();
         }
       }
-      new import_obsidian7.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
     } catch (err) {
       console.error("[espanol-diccionario] Database init failed:", err);
       const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO);

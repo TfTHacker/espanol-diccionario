@@ -1,6 +1,6 @@
 // src/main.ts — Plugin entry, registration, lifecycle
 
-import { Notice, Plugin, Platform } from "obsidian";
+import { Plugin, Platform, Notice } from "obsidian";
 import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
@@ -146,7 +146,6 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 				}
 			}
 
-			new Notice("Español Diccionario: Dictionary loaded");
 		} catch (err) {
 			console.error("[espanol-diccionario] Database init failed:", err);
 
