@@ -2171,6 +2171,7 @@ var require_sql_wasm_browser = __commonJS({
 var db_exports = {};
 __export(db_exports, {
   closeDatabase: () => closeDatabase,
+  getDatabaseStats: () => getDatabaseStats,
   getDefinitions: () => getDefinitions,
   getSentences: () => getSentences,
   initDatabase: () => initDatabase,
@@ -2281,6 +2282,31 @@ async function loadWasmBinary(app, pluginDir) {
 }
 function isDatabaseReady() {
   return dbReady;
+}
+function getDatabaseStats() {
+  if (!dbReady || !db) return null;
+  try {
+    const esWords = db.exec("SELECT COUNT(*) FROM words WHERE lang = 'es'")[0]?.values[0]?.[0] ?? 0;
+    const enWords = db.exec("SELECT COUNT(*) FROM words WHERE lang = 'en'")[0]?.values[0]?.[0] ?? 0;
+    const definitions = db.exec("SELECT COUNT(*) FROM definitions")[0]?.values[0]?.[0] ?? 0;
+    const sentences = db.exec("SELECT COUNT(*) FROM sentences")[0]?.values[0]?.[0] ?? 0;
+    const lemmas = db.exec("SELECT COUNT(*) FROM lemmas")[0]?.values[0]?.[0] ?? 0;
+    const pageSize = db.exec("PRAGMA page_size")[0]?.values[0]?.[0] ?? 4096;
+    const pageCount = db.exec("PRAGMA page_count")[0]?.values[0]?.[0] ?? 0;
+    const dbSizeBytes = pageSize * pageCount;
+    const dbSizeMB = dbSizeBytes > 0 ? (dbSizeBytes / 1024 / 1024).toFixed(1) : "unknown";
+    return {
+      esWords: Number(esWords),
+      enWords: Number(enWords),
+      definitions: Number(definitions),
+      sentences: Number(sentences),
+      lemmas: Number(lemmas),
+      totalWords: Number(esWords) + Number(enWords),
+      dbSizeMB
+    };
+  } catch {
+    return null;
+  }
 }
 function closeDatabase() {
   if (db) {
@@ -2483,6 +2509,20 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
       })
     );
     containerEl.createEl("h3", { text: "Database" });
+    const stats = getDatabaseStats();
+    if (stats) {
+      const statsLines = [
+        `\u{1F1EA}\u{1F1F8} Spanish words: ${stats.esWords.toLocaleString()}`,
+        `\u{1F1EC}\u{1F1E7} English entries: ${stats.enWords.toLocaleString()}`,
+        `\u{1F4D6} Definitions: ${stats.definitions.toLocaleString()}`,
+        `\u{1F504} Lemmas: ${stats.lemmas.toLocaleString()}`,
+        `\u{1F4AC} Sentences: ${stats.sentences.toLocaleString()}`,
+        `\u{1F4BE} Database size: ${stats.dbSizeMB} MB`
+      ];
+      new import_obsidian2.Setting(containerEl).setName("Dictionary statistics").setDesc(statsLines.join("\n"));
+    } else {
+      new import_obsidian2.Setting(containerEl).setName("Dictionary statistics").setDesc("Database not loaded yet. Open the dictionary view first.");
+    }
     new import_obsidian2.Setting(containerEl).setName("Re-download dictionary database").setDesc("Delete the local dictionary database and re-download the latest version from GitHub. Useful after a database update or if the database is corrupted.").addButton((button) => {
       button.setButtonText("Re-download database").setClass("mod-warning").onClick(async () => {
         button.setButtonText("Downloading...");
@@ -2494,6 +2534,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
           button.setButtonText("Re-download database");
           button.setDisabled(false);
           new import_obsidian2.Notice("Dictionary database updated successfully!");
+          this.display();
         } catch (err) {
           button.setButtonText("Re-download database");
           button.setDisabled(false);

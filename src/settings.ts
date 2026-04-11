@@ -1,7 +1,7 @@
 // src/settings.ts — Plugin settings tab & defaults
 
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
-import { redownloadDatabase } from "./dictionary/db";
+import { getDatabaseStats, redownloadDatabase } from "./dictionary/db";
 import type EspañolDiccionarioPlugin from "./main";
 
 export interface PluginSettings {
@@ -148,6 +148,26 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 		// Database settings
 		containerEl.createEl("h3", { text: "Database" });
 
+		// Show database statistics
+		const stats = getDatabaseStats();
+		if (stats) {
+			const statsLines = [
+				`🇪🇸 Spanish words: ${stats.esWords.toLocaleString()}`,
+				`🇬🇧 English entries: ${stats.enWords.toLocaleString()}`,
+				`📖 Definitions: ${stats.definitions.toLocaleString()}`,
+				`🔄 Lemmas: ${stats.lemmas.toLocaleString()}`,
+				`💬 Sentences: ${stats.sentences.toLocaleString()}`,
+				`💾 Database size: ${stats.dbSizeMB} MB`,
+			];
+			new Setting(containerEl)
+				.setName("Dictionary statistics")
+				.setDesc(statsLines.join("\n"));
+		} else {
+			new Setting(containerEl)
+				.setName("Dictionary statistics")
+				.setDesc("Database not loaded yet. Open the dictionary view first.");
+		}
+
 		new Setting(containerEl)
 			.setName("Re-download dictionary database")
 			.setDesc("Delete the local dictionary database and re-download the latest version from GitHub. Useful after a database update or if the database is corrupted.")
@@ -159,9 +179,11 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						const app = this.app;
 						const pluginDir = `.obsidian/plugins/${this.plugin.manifest.id}`;
 						await redownloadDatabase(app, pluginDir);
-						button.setButtonText("Re-download database");
-						button.setDisabled(false);
-						new Notice("Dictionary database updated successfully!");
+					button.setButtonText("Re-download database");
+					button.setDisabled(false);
+					new Notice("Dictionary database updated successfully!");
+						// Refresh stats after re-download
+						this.display();
 					} catch (err) {
 						button.setButtonText("Re-download database");
 						button.setDisabled(false);

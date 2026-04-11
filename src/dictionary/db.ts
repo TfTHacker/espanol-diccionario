@@ -161,6 +161,44 @@ export function isDatabaseReady(): boolean {
 	return dbReady;
 }
 
+/**
+ * Get database statistics (word counts, sizes, etc.)
+ */
+export function getDatabaseStats(): {
+	esWords: number;
+	enWords: number;
+	definitions: number;
+	sentences: number;
+	lemmas: number;
+	totalWords: number;
+	dbSizeMB: string;
+} | null {
+	if (!dbReady || !db) return null;
+	try {
+		const esWords = db.exec("SELECT COUNT(*) FROM words WHERE lang = 'es'")[0]?.values[0]?.[0] as number ?? 0;
+		const enWords = db.exec("SELECT COUNT(*) FROM words WHERE lang = 'en'")[0]?.values[0]?.[0] as number ?? 0;
+		const definitions = db.exec("SELECT COUNT(*) FROM definitions")[0]?.values[0]?.[0] as number ?? 0;
+		const sentences = db.exec("SELECT COUNT(*) FROM sentences")[0]?.values[0]?.[0] as number ?? 0;
+		const lemmas = db.exec("SELECT COUNT(*) FROM lemmas")[0]?.values[0]?.[0] as number ?? 0;
+		// Get DB file size from the in-memory database
+		const pageSize = db.exec("PRAGMA page_size")[0]?.values[0]?.[0] as number ?? 4096;
+		const pageCount = db.exec("PRAGMA page_count")[0]?.values[0]?.[0] as number ?? 0;
+		const dbSizeBytes = pageSize * pageCount;
+		const dbSizeMB = dbSizeBytes > 0 ? (dbSizeBytes / 1024 / 1024).toFixed(1) : "unknown";
+		return {
+			esWords: Number(esWords),
+			enWords: Number(enWords),
+			definitions: Number(definitions),
+			sentences: Number(sentences),
+			lemmas: Number(lemmas),
+			totalWords: Number(esWords) + Number(enWords),
+			dbSizeMB,
+		};
+	} catch {
+		return null;
+	}
+}
+
 export function closeDatabase(): void {
 	if (db) {
 		db.close();
