@@ -54,7 +54,9 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// ── LLM Connection ──────────────────────────────────────────
+		// ── LLM Parameters ───────────────────────────────────────────
+
+		containerEl.createEl("h3", { text: "LLM parameters" });
 
 		new Setting(containerEl)
 			.setName("Server URL")
@@ -119,9 +121,19 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ── Chat Behavior ────────────────────────────────────────────
-
-		containerEl.createEl("h3", { text: "Chat behavior" });
+		new Setting(containerEl)
+			.setName("Temperature")
+			.setDesc("Lower = more deterministic, higher = more creative. (0–1)")
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 1, 0.1)
+					.setValue(this.plugin.settings.llmTemperature)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.llmTemperature = value;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		new Setting(containerEl)
 			.setName("System prompt")
@@ -138,29 +150,18 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 				text.inputEl.style.width = "100%";
 			});
 
-		new Setting(containerEl)
-			.setName("Temperature")
-			.setDesc("Lower = more deterministic, higher = more creative. (0–1)")
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 1, 0.1)
-					.setValue(this.plugin.settings.llmTemperature)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.llmTemperature = value;
-						await this.plugin.saveSettings();
-					})
-			);
+		// ── Prompts ──────────────────────────────────────────────────
 
-		containerEl.createEl("h4", { text: "Suggestion prompts" });
+		containerEl.createEl("h3", { text: "Prompts for word lookups" });
+
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
-			text: "Clickable prompts shown below each dictionary entry. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions.",
+			text: "Customize the prompts shown in the chat panel. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions.",
 		});
 
 		for (let i = 0; i < 4; i++) {
 			new Setting(containerEl)
-				.setName(`Prompt ${i + 1}`)
+				.setName(`Suggestion ${i + 1}`)
 				.addText((text) =>
 					text
 						.setPlaceholder(DEFAULT_SETTINGS.chatSuggestions[i])
@@ -193,26 +194,6 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 				text.inputEl.style.width = "100%";
 			});
 
-		new Setting(containerEl)
-			.setName("Reset chat settings")
-			.setDesc("Restore all chat settings to their defaults.")
-			.addButton((button) =>
-				button
-					.setButtonText("Reset to defaults")
-					.setClass("mod-warning")
-					.onClick(async () => {
-						this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
-						this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
-						this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
-						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
-						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
-						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
-						this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
-						await this.plugin.saveSettings();
-						this.display();
-					})
-			);
-
 		// ── Display ──────────────────────────────────────────────────
 
 		containerEl.createEl("h3", { text: "Display" });
@@ -243,7 +224,29 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ── Database ─────────────────────────────────────────────────
+		// ── Reset ─────────────────────────────────────────────────────
+
+		new Setting(containerEl)
+			.setName("Reset chat settings")
+			.setDesc("Restore all LLM parameters and prompts to their defaults.")
+			.addButton((button) =>
+				button
+					.setButtonText("Reset to defaults")
+					.setClass("mod-warning")
+					.onClick(async () => {
+						this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
+						this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
+						this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
+						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
+						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
+						this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
+						await this.plugin.saveSettings();
+						this.display();
+					})
+			);
+
+		// ── Database ──────────────────────────────────────────────────
 
 		containerEl.createEl("h3", { text: "Database" });
 

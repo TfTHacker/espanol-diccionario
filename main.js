@@ -2668,6 +2668,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.createEl("h3", { text: "LLM parameters" });
     new import_obsidian3.Setting(containerEl).setName("Server URL").setDesc("OpenAI-compatible API endpoint. Use http://localhost:11434 for local Ollama, or https://api.openai.com/v1 for OpenAI.").addText(
       (text) => text.setPlaceholder("https://ollama.com").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
         this.plugin.settings.llmServerUrl = value.trim();
@@ -2707,7 +2708,12 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         );
       })
     );
-    containerEl.createEl("h3", { text: "Chat behavior" });
+    new import_obsidian3.Setting(containerEl).setName("Temperature").setDesc("Lower = more deterministic, higher = more creative. (0\u20131)").addSlider(
+      (slider) => slider.setLimits(0, 1, 0.1).setValue(this.plugin.settings.llmTemperature).setDynamicTooltip().onChange(async (value) => {
+        this.plugin.settings.llmTemperature = value;
+        await this.plugin.saveSettings();
+      })
+    );
     new import_obsidian3.Setting(containerEl).setName("System prompt").setDesc("Instructions that shape how the AI responds. Tailored for Spanish tutoring by default.").addTextArea((text) => {
       text.setPlaceholder("You are a helpful Spanish language tutor...").setValue(this.plugin.settings.systemPrompt).onChange(async (value) => {
         this.plugin.settings.systemPrompt = value;
@@ -2716,19 +2722,13 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
       text.inputEl.rows = 4;
       text.inputEl.style.width = "100%";
     });
-    new import_obsidian3.Setting(containerEl).setName("Temperature").setDesc("Lower = more deterministic, higher = more creative. (0\u20131)").addSlider(
-      (slider) => slider.setLimits(0, 1, 0.1).setValue(this.plugin.settings.llmTemperature).setDynamicTooltip().onChange(async (value) => {
-        this.plugin.settings.llmTemperature = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    containerEl.createEl("h4", { text: "Suggestion prompts" });
+    containerEl.createEl("h3", { text: "Prompts for word lookups" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Clickable prompts shown below each dictionary entry. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions."
+      text: "Customize the prompts shown in the chat panel. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions."
     });
     for (let i = 0; i < 4; i++) {
-      new import_obsidian3.Setting(containerEl).setName(`Prompt ${i + 1}`).addText(
+      new import_obsidian3.Setting(containerEl).setName(`Suggestion ${i + 1}`).addText(
         (text) => text.setPlaceholder(DEFAULT_SETTINGS.chatSuggestions[i]).setValue(this.plugin.settings.chatSuggestions[i] || "").onChange(async (value) => {
           this.plugin.settings.chatSuggestions[i] = value;
           await this.plugin.saveSettings();
@@ -2748,19 +2748,6 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
       text.inputEl.rows = 3;
       text.inputEl.style.width = "100%";
     });
-    new import_obsidian3.Setting(containerEl).setName("Reset chat settings").setDesc("Restore all chat settings to their defaults.").addButton(
-      (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
-        this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
-        this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
-        this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
-        this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
-        this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
-        this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
-        this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
-        await this.plugin.saveSettings();
-        this.display();
-      })
-    );
     containerEl.createEl("h3", { text: "Display" });
     new import_obsidian3.Setting(containerEl).setName("Auto-play pronunciation").setDesc("Automatically play audio pronunciation when looking up a Spanish word.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.autoPlayAudio).onChange(async (value) => {
@@ -2772,6 +2759,19 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
       (slider) => slider.setLimits(1, 20, 1).setValue(this.plugin.settings.maxSentences).setDynamicTooltip().onChange(async (value) => {
         this.plugin.settings.maxSentences = value;
         await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian3.Setting(containerEl).setName("Reset chat settings").setDesc("Restore all LLM parameters and prompts to their defaults.").addButton(
+      (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
+        this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
+        this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
+        this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
+        this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
+        this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+        this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
+        this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
+        await this.plugin.saveSettings();
+        this.display();
       })
     );
     containerEl.createEl("h3", { text: "Database" });
