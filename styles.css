@@ -336,6 +336,59 @@
 	border-bottom-left-radius: 2px;
 }
 
+.ed-chat-assistant .internal-embed {
+	display: none;
+}
+
+.ed-chat-assistant p {
+	margin: 0.3em 0;
+}
+
+.ed-chat-assistant h1, .ed-chat-assistant h2, .ed-chat-assistant h3,
+.ed-chat-assistant h4, .ed-chat-assistant h5, .ed-chat-assistant h6 {
+	margin: 0.6em 0 0.3em;
+	font-size: 1.1em;
+}
+
+.ed-chat-assistant h3 {
+	font-size: 1em;
+	font-weight: 600;
+}
+
+.ed-chat-assistant ul, .ed-chat-assistant ol {
+	margin: 0.3em 0;
+	padding-left: 1.5em;
+}
+
+.ed-chat-assistant code {
+	background: var(--background-modifier-hover);
+	padding: 0.15em 0.3em;
+	border-radius: 3px;
+	font-size: 0.9em;
+}
+
+.ed-chat-assistant pre {
+	background: var(--background-modifier-hover);
+	padding: 0.5em;
+	border-radius: 4px;
+	overflow-x: auto;
+}
+
+.ed-chat-assistant blockquote {
+	border-left: 3px solid var(--text-faint);
+	margin: 0.5em 0;
+	padding-left: 0.8em;
+	color: var(--text-muted);
+}
+
+.ed-chat-assistant strong {
+	font-weight: 600;
+}
+
+.ed-chat-assistant em {
+	font-style: italic;
+}
+
 .ed-chat-error {
 	color: var(--text-error);
 }

@@ -1,6 +1,6 @@
 // src/ui/dictionary-view.ts — Main dictionary tab/view
 
-import { ItemView, WorkspaceLeaf, Notice, Platform } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, Platform, MarkdownRenderer } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
 import { fullLookup, searchDictionary } from "../dictionary/lookup";
 import { isDatabaseReady } from "../dictionary/db";
@@ -451,25 +451,46 @@ export class DictionaryView extends ItemView {
 
 		// Stream response
 		assistantDiv.textContent = "";
+		let accumulated = "";
 		const wordContext = this.currentResult?.word?.word;
+		let renderTimeout: ReturnType<typeof setTimeout> | null = null;
+
+		const renderMarkdown = () => {
+			const md = accumulated;
+			const container = assistantDiv;
+			container.empty();
+			MarkdownRenderer.render(this.app, md, container, "", this);
+		};
+
+		const debouncedRender = () => {
+			if (renderTimeout) clearTimeout(renderTimeout);
+			renderTimeout = setTimeout(renderMarkdown, 80);
+			};
 
 		const response = await streamChatMessage(
 			this.chatMessages,
 			this.plugin.settings,
 			(text) => {
-				assistantDiv.textContent += text;
+				accumulated += text;
+				assistantDiv.textContent = accumulated;
 				if (messagesContainer) {
 					messagesContainer.scrollTop = messagesContainer.scrollHeight;
 				}
+				debouncedRender();
 			},
 			wordContext
 		);
+
+		// Clear any pending render
+		if (renderTimeout) clearTimeout(renderTimeout);
 
 		if (response.error) {
 			assistantDiv.textContent = `Error: ${response.error}`;
 			assistantDiv.classList.add("ed-chat-error");
 		} else {
 			this.chatMessages.push({ role: "assistant", content: response.message });
+			// Final markdown render
+			renderMarkdown();
 		}
 
 		this.isStreaming = false;

@@ -3518,23 +3518,39 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
     assistantDiv.textContent = "";
+    let accumulated = "";
     const wordContext = this.currentResult?.word?.word;
+    let renderTimeout = null;
+    const renderMarkdown = () => {
+      const md = accumulated;
+      const container = assistantDiv;
+      container.empty();
+      import_obsidian5.MarkdownRenderer.render(this.app, md, container, "", this);
+    };
+    const debouncedRender = () => {
+      if (renderTimeout) clearTimeout(renderTimeout);
+      renderTimeout = setTimeout(renderMarkdown, 80);
+    };
     const response = await streamChatMessage(
       this.chatMessages,
       this.plugin.settings,
       (text) => {
-        assistantDiv.textContent += text;
+        accumulated += text;
+        assistantDiv.textContent = accumulated;
         if (messagesContainer) {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
+        debouncedRender();
       },
       wordContext
     );
+    if (renderTimeout) clearTimeout(renderTimeout);
     if (response.error) {
       assistantDiv.textContent = `Error: ${response.error}`;
       assistantDiv.classList.add("ed-chat-error");
     } else {
       this.chatMessages.push({ role: "assistant", content: response.message });
+      renderMarkdown();
     }
     this.isStreaming = false;
   }
