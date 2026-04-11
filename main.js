@@ -2451,7 +2451,8 @@ sentences. Always use Spain Spanish conventions (vosotros, distinci\xF3n, etc.).
 When explaining grammar, be clear and give practical examples. Respond in the same
 language the user writes in (English or Spanish).`,
   maxSentences: 5,
-  autoPlayAudio: false
+  autoPlayAudio: false,
+  navHistory: []
 };
 var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSettingTab {
   constructor(app, plugin) {
@@ -3090,6 +3091,7 @@ var DictionaryView = class extends import_obsidian3.ItemView {
       }
     });
     this.searchInput.focus();
+    this.loadHistory();
     this.containerEl.addEventListener("keydown", (evt) => {
       if (evt.altKey && evt.key === "ArrowLeft") {
         evt.preventDefault();
@@ -3125,7 +3127,6 @@ var DictionaryView = class extends import_obsidian3.ItemView {
 				</div>`;
       }
     }
-    this.loadHistory();
   }
   /**
    * Notify the view of a database error
@@ -3319,23 +3320,16 @@ var DictionaryView = class extends import_obsidian3.ItemView {
   // History persistence
   // ============================================================
   async loadHistory() {
-    try {
-      const data = await this.plugin.loadData();
-      if (data && Array.isArray(data.navHistory)) {
-        this.navHistory = data.navHistory;
-        this.navIndex = data.navHistory.length - 1;
-        this.updateNavButtons();
-      }
-    } catch {
+    const history = this.plugin.settings.navHistory;
+    if (Array.isArray(history) && history.length > 0) {
+      this.navHistory = history;
+      this.navIndex = history.length - 1;
+      this.updateNavButtons();
     }
   }
   async saveHistory() {
-    try {
-      const data = await this.plugin.loadData() || {};
-      data.navHistory = this.navHistory;
-      await this.plugin.saveData(data);
-    } catch {
-    }
+    this.plugin.settings.navHistory = this.navHistory;
+    await this.plugin.saveSettings();
   }
   /**
    * Toggle the recents dropdown.

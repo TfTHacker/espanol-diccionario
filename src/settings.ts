@@ -12,6 +12,7 @@ export interface PluginSettings {
 	systemPrompt: string;
 	maxSentences: number;
 	autoPlayAudio: boolean;
+	navHistory: string[];
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -26,6 +27,7 @@ When explaining grammar, be clear and give practical examples. Respond in the sa
 language the user writes in (English or Spanish).`,
 	maxSentences: 5,
 	autoPlayAudio: false,
+	navHistory: [],
 };
 
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {

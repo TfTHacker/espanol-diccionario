@@ -224,6 +224,9 @@ export class DictionaryView extends ItemView {
 		// Focus search input
 		this.searchInput.focus();
 
+		// Restore navigation history from persisted storage
+		this.loadHistory();
+
 		// Global keyboard shortcut for back/forward navigation
 		this.containerEl.addEventListener("keydown", (evt: KeyboardEvent) => {
 			if (evt.altKey && evt.key === "ArrowLeft") {
@@ -264,9 +267,6 @@ export class DictionaryView extends ItemView {
 				</div>`;
 			}
 		}
-
-		// Restore navigation history from persisted storage
-		this.loadHistory();
 	}
 
 	/**
@@ -506,26 +506,17 @@ export class DictionaryView extends ItemView {
 	// ============================================================
 
 	private async loadHistory() {
-		try {
-			const data = await this.plugin.loadData();
-			if (data && Array.isArray(data.navHistory)) {
-				this.navHistory = data.navHistory;
-				this.navIndex = data.navHistory.length - 1;
-				this.updateNavButtons();
-			}
-		} catch {
-			// No saved history yet, start fresh
+		const history = this.plugin.settings.navHistory;
+		if (Array.isArray(history) && history.length > 0) {
+			this.navHistory = history;
+			this.navIndex = history.length - 1;
+			this.updateNavButtons();
 		}
 	}
 
 	private async saveHistory() {
-		try {
-			const data = await this.plugin.loadData() || {};
-			data.navHistory = this.navHistory;
-			await this.plugin.saveData(data);
-		} catch {
-			// Silently fail — history is not critical
-		}
+		this.plugin.settings.navHistory = this.navHistory;
+		await this.plugin.saveSettings();
 	}
 
 	/**
