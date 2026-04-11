@@ -1,6 +1,6 @@
 // src/main.ts — Plugin entry, registration, lifecycle
 
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, Platform } from "obsidian";
 import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
@@ -17,10 +17,12 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			return new DictionaryView(leaf, this);
 		});
 
-		// Register the web viewer
-		this.registerView(VIEW_TYPE_WEB, (leaf) => {
-			return new WebView(leaf);
-		});
+		// Register the web viewer (desktop only — uses Electron webview)
+		if (!Platform.isMobile) {
+			this.registerView(VIEW_TYPE_WEB, (leaf) => {
+				return new WebView(leaf);
+			});
+		}
 
 		// Add ribbon icon
 		this.addRibbonIcon("book-open", "Español Diccionario", () => {

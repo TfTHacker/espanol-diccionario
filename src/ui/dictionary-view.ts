@@ -1,6 +1,6 @@
 // src/ui/dictionary-view.ts — Main dictionary tab/view
 
-import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, Platform } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
 import { fullLookup, searchDictionary } from "../dictionary/lookup";
 import { isDatabaseReady } from "../dictionary/db";
@@ -381,6 +381,12 @@ export class DictionaryView extends ItemView {
 		const url = el.dataset.url;
 		const title = el.dataset.title;
 		if (!url) return;
+
+		// On mobile, open in OS browser (webview not supported)
+		if (Platform.isMobile) {
+			window.open(url, "_blank");
+			return;
+		}
 
 		this.plugin.openWebView(url, title);
 	}

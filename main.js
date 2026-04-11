@@ -3223,6 +3223,10 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     const url = el.dataset.url;
     const title = el.dataset.title;
     if (!url) return;
+    if (import_obsidian3.Platform.isMobile) {
+      window.open(url, "_blank");
+      return;
+    }
     this.plugin.openWebView(url, title);
   }
   toggleChat() {
@@ -3543,9 +3547,11 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian5.Plugin {
     this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
       return new DictionaryView(leaf, this);
     });
-    this.registerView(VIEW_TYPE_WEB, (leaf) => {
-      return new WebView(leaf);
-    });
+    if (!import_obsidian5.Platform.isMobile) {
+      this.registerView(VIEW_TYPE_WEB, (leaf) => {
+        return new WebView(leaf);
+      });
+    }
     this.addRibbonIcon("book-open", "Espa\xF1ol Diccionario", () => {
       this.activateView();
     });
