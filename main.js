@@ -3348,7 +3348,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       attr: { type: "submit" }
     });
     chatSendBtn.setText("Send");
-    this.chatRecentsDropdown = this.chatContainer.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
+    this.chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
     chatForm.addEventListener("submit", (evt) => {
       evt.preventDefault();
       this.sendChat();

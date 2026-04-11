@@ -275,6 +275,7 @@
 	flex-shrink: 0;
 	border-top: 1px solid var(--background-modifier-border);
 	margin-top: 16px;
+	position: relative;
 }
 
 .ed-hidden {
@@ -910,7 +911,7 @@
 /* === Chat recents dropdown === */
 .ed-chat-recents-dropdown {
 	position: absolute;
-	bottom: 100%;
+	bottom: 56px;
 	left: 0;
 	right: 0;
 	max-height: 250px;
@@ -920,7 +921,6 @@
 	border-radius: 6px;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 	z-index: 100;
-	margin-bottom: 4px;
 }
 
 .ed-chat-recents-item {

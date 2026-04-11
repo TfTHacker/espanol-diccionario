@@ -237,8 +237,8 @@ export class DictionaryView extends ItemView {
 		});
 		chatSendBtn.setText("Send");
 
-		// Chat prompt history dropdown
-		this.chatRecentsDropdown = this.chatContainer.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
+		// Chat prompt history dropdown (positioned relative to chatSection, not clipped by chatContainer)
+		this.chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
 
 		chatForm.addEventListener("submit", (evt) => {
 			evt.preventDefault();
