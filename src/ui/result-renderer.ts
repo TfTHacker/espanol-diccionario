@@ -58,15 +58,15 @@ function renderAudioButton(word: string): string {
 
 /**
  * Render definitions list
- * For Spanish entries: definitions are in English (not clickable)
- * For English entries: definitions are Spanish words (clickable)
+ * For Spanish entries: definitions are in English → English words clickable (reverse lookup)
+ * For English entries: definitions are Spanish words → Spanish words clickable (drill down)
  */
 function renderDefinitions(definitions: any[], lang: string): string {
 	const items = definitions.map((def, i) => {
 		const num = def.sense_num || (i + 1);
 		const defHtml = lang === "en"
 			? makeReverseDefClickable(def.definition)
-			: escapeHtml(def.definition);
+			: makeEnglishDefClickable(def.definition);
 		let html = `<span class="ed-def-num">${num}.</span> <span class="ed-def-text">${defHtml}</span>`;
 		if (def.tags) {
 			try {
@@ -109,6 +109,23 @@ function makeReverseDefClickable(text: string): string {
 		}
 	);
 	return result;
+}
+
+/**
+ * Make an English definition text clickable.
+ * Spanish entries have English definitions like "house, dwelling" or "to speak, to talk".
+ * Each English word is clickable (looks up English→Spanish reverse entry).
+ */
+function makeEnglishDefClickable(text: string): string {
+	// Strip leading "to " for verb forms — we want "to" as plain text, "speak" clickable
+	// Split on commas, semicolons, and parenthetical tags to identify individual words
+	// General approach: make each alphabetic word (3+ chars) clickable as English
+	return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word, offset) => {
+		// Don't link common English function words
+		const skip = new Set(["the","and","that","this","with","from","for","not","but","who","whom","whose","which","what","where","when","how","than","then","also","very","much","more","most","some","such","only","own","same","will","shall","may","might","can","could","would","should","has","have","had","been","being","does","did","done","made","make","like","just","over","into","also","back","because","through","between","before","after","while","during","without","within","about","above","below","under","these","those","other","another","each","every","both","few","many","several","there","here","where","when","why","still","even","too","yet","nor","either","neither","though","although","except","since","until","upon"]);
+		if (skip.has(word.toLowerCase())) return escapeHtml(match);
+		return makeClickable(word, "en");
+	});
 }
 
 /**

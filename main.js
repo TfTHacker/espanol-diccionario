@@ -2745,7 +2745,7 @@ function renderAudioButton(word) {
 function renderDefinitions(definitions, lang) {
   const items = definitions.map((def, i) => {
     const num = def.sense_num || i + 1;
-    const defHtml = lang === "en" ? makeReverseDefClickable(def.definition) : escapeHtml(def.definition);
+    const defHtml = lang === "en" ? makeReverseDefClickable(def.definition) : makeEnglishDefClickable(def.definition);
     let html = `<span class="ed-def-num">${num}.</span> <span class="ed-def-text">${defHtml}</span>`;
     if (def.tags) {
       try {
@@ -2780,6 +2780,13 @@ function makeReverseDefClickable(text) {
     }
   );
   return result;
+}
+function makeEnglishDefClickable(text) {
+  return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word, offset) => {
+    const skip = /* @__PURE__ */ new Set(["the", "and", "that", "this", "with", "from", "for", "not", "but", "who", "whom", "whose", "which", "what", "where", "when", "how", "than", "then", "also", "very", "much", "more", "most", "some", "such", "only", "own", "same", "will", "shall", "may", "might", "can", "could", "would", "should", "has", "have", "had", "been", "being", "does", "did", "done", "made", "make", "like", "just", "over", "into", "also", "back", "because", "through", "between", "before", "after", "while", "during", "without", "within", "about", "above", "below", "under", "these", "those", "other", "another", "each", "every", "both", "few", "many", "several", "there", "here", "where", "when", "why", "still", "even", "too", "yet", "nor", "either", "neither", "though", "although", "except", "since", "until", "upon"]);
+    if (skip.has(word.toLowerCase())) return escapeHtml(match);
+    return makeClickable(word, "en");
+  });
 }
 function renderSentences(sentences) {
   const items = sentences.map((s) => {
