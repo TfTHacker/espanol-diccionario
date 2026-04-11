@@ -2765,6 +2765,7 @@ function renderResult(result, maxSentences = 5) {
     headerParts.push(`<span class="ed-ipa">${escapeHtml(word.ipa)}</span>`);
   }
   parts.push(`<div class="ed-header">${headerParts.join(" ")}</div>`);
+  parts.push(renderExternalLinks(word.word, word.lang));
   if (word.lang === "es") {
     parts.push(renderAudioButton(word.word));
   }
@@ -2782,6 +2783,46 @@ function renderAudioButton(word) {
 			\u{1F50A} Listen
 		</button>
 	</div>`;
+}
+var EXTERNAL_SITES = [
+  {
+    key: "wr",
+    label: "WordReference",
+    icon: "WR",
+    url: (w, lang) => lang === "es" ? `https://www.wordreference.com/es/en/translation.asp?spen=${encodeURIComponent(w)}` : `https://www.wordreference.com/es/translation.asp?en=${encodeURIComponent(w)}`
+  },
+  {
+    key: "rae",
+    label: "RAE (Real Academia Espa\xF1ola)",
+    icon: "RAE",
+    url: (w) => `https://dle.rae.es/${encodeURIComponent(w)}`
+  },
+  {
+    key: "sd",
+    label: "SpanishDict",
+    icon: "SD",
+    url: (w) => `https://www.spanishdict.com/translate/${encodeURIComponent(w)}`
+  },
+  {
+    key: "linguee",
+    label: "Linguee",
+    icon: "Li",
+    url: (w, lang) => lang === "es" ? `https://www.linguee.com/english-spanish/search?source=auto&query=${encodeURIComponent(w)}` : `https://www.linguee.com/spanish-english/search?source=auto&query=${encodeURIComponent(w)}`
+  },
+  {
+    key: "reverso",
+    label: "Reverso Context",
+    icon: "RC",
+    url: (w, lang) => `https://context.reverso.net/translation/${lang === "es" ? "spanish-english" : "english-spanish"}/${encodeURIComponent(w)}`
+  }
+];
+function renderExternalLinks(word, lang) {
+  const links = EXTERNAL_SITES.map((site) => {
+    if (site.key === "rae" && lang !== "es") return "";
+    const href = site.url(word, lang);
+    return `<a class="ed-ext-link ed-ext-${site.key}" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="${site.label}">${site.icon}</a>`;
+  }).filter(Boolean).join("");
+  return `<div class="ed-ext-links">${links}</div>`;
 }
 function renderDefinitions(definitions, lang) {
   const items = definitions.map((def, i) => {
