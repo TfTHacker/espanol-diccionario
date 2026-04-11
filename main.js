@@ -2900,6 +2900,9 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     // Result state
     this.currentResult = null;
     this.currentWord = "";
+    // Navigation history
+    this.navHistory = [];
+    this.navIndex = -1;
     // Chat state
     this.chatMessages = [];
     this.isStreaming = false;
@@ -2919,6 +2922,23 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     container.empty();
     container.classList.add("espanol-diccionario");
     const searchDiv = container.createDiv({ cls: "ed-search-container" });
+    const navDiv = searchDiv.createDiv({ cls: "ed-nav-buttons" });
+    this.navButtons = {
+      back: navDiv.createEl("button", {
+        cls: "ed-nav-btn ed-nav-back",
+        attr: { type: "button", title: "Back (Alt+\u2190)" }
+      }),
+      forward: navDiv.createEl("button", {
+        cls: "ed-nav-btn ed-nav-forward",
+        attr: { type: "button", title: "Forward (Alt+\u2192)" }
+      })
+    };
+    this.navButtons.back.setText("\u2190");
+    this.navButtons.forward.setText("\u2192");
+    this.navButtons.back.disabled = true;
+    this.navButtons.forward.disabled = true;
+    this.navButtons.back.addEventListener("click", () => this.navigateBack());
+    this.navButtons.forward.addEventListener("click", () => this.navigateForward());
     const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
     this.searchInput = searchForm.createEl("input", {
       type: "text",
@@ -3015,6 +3035,15 @@ var DictionaryView = class extends import_obsidian3.ItemView {
       }
     });
     this.searchInput.focus();
+    this.containerEl.addEventListener("keydown", (evt) => {
+      if (evt.altKey && evt.key === "ArrowLeft") {
+        evt.preventDefault();
+        this.navigateBack();
+      } else if (evt.altKey && evt.key === "ArrowRight") {
+        evt.preventDefault();
+        this.navigateForward();
+      }
+    });
   }
   async onClose() {
   }
@@ -3054,15 +3083,21 @@ var DictionaryView = class extends import_obsidian3.ItemView {
   doSearch() {
     const word = this.searchInput.value.trim();
     if (!word) {
-      const resultArea2 = this.containerEl.querySelector("#ed-result-area");
-      if (resultArea2) {
-        resultArea2.innerHTML = `<div class="ed-empty-state">
+      const resultArea = this.containerEl.querySelector("#ed-result-area");
+      if (resultArea) {
+        resultArea.innerHTML = `<div class="ed-empty-state">
 					<div class="ed-empty-icon">\u{1F4D6}</div>
 					<div class="ed-empty-text">Type a word above to look it up</div>
 				</div>`;
       }
       return;
     }
+    this.doLookup(word, true);
+  }
+  /**
+   * Core lookup logic. pushHistory=true when user initiates search (not from navigation)
+   */
+  doLookup(word, pushHistory) {
     const resultArea = this.containerEl.querySelector("#ed-result-area");
     if (!resultArea) return;
     resultArea.innerHTML = renderLoading(word);
@@ -3074,6 +3109,9 @@ var DictionaryView = class extends import_obsidian3.ItemView {
         this.currentResult = result;
         this.currentWord = word;
         resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
+        if (pushHistory) {
+          this.pushNavHistory(word);
+        }
         if (result.word.lang === "es" && this.plugin.settings.autoPlayAudio) {
           this.handlePlayAudio(resultArea.querySelector("[data-action='play-audio']"));
         }
@@ -3081,6 +3119,9 @@ var DictionaryView = class extends import_obsidian3.ItemView {
         this.currentResult = null;
         this.currentWord = word;
         resultArea.innerHTML = renderNotFound(word);
+        if (pushHistory) {
+          this.pushNavHistory(word);
+        }
       }
     } catch (err) {
       resultArea.innerHTML = renderDbError(
@@ -3118,7 +3159,7 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     if (!word) return;
     this.searchInput.value = word;
     this.hideTypeahead();
-    this.doSearch();
+    this.doLookup(word, true);
   }
   toggleChat() {
     this.chatContainer.classList.toggle("ed-hidden");
@@ -3171,6 +3212,43 @@ var DictionaryView = class extends import_obsidian3.ItemView {
       this.chatMessages.push({ role: "assistant", content: response.message });
     }
     this.isStreaming = false;
+  }
+  // ============================================================
+  // Navigation history
+  // ============================================================
+  pushNavHistory(word) {
+    if (this.navIndex < this.navHistory.length - 1) {
+      this.navHistory = this.navHistory.slice(0, this.navIndex + 1);
+    }
+    if (this.navHistory.length > 0 && this.navHistory[this.navHistory.length - 1] === word) {
+      return;
+    }
+    this.navHistory.push(word);
+    this.navIndex = this.navHistory.length - 1;
+    this.updateNavButtons();
+  }
+  navigateBack() {
+    if (this.navIndex <= 0) return;
+    this.navIndex--;
+    const word = this.navHistory[this.navIndex];
+    this.searchInput.value = word;
+    this.hideTypeahead();
+    this.doLookup(word, false);
+    this.updateNavButtons();
+  }
+  navigateForward() {
+    if (this.navIndex >= this.navHistory.length - 1) return;
+    this.navIndex++;
+    const word = this.navHistory[this.navIndex];
+    this.searchInput.value = word;
+    this.hideTypeahead();
+    this.doLookup(word, false);
+    this.updateNavButtons();
+  }
+  updateNavButtons() {
+    if (!this.navButtons) return;
+    this.navButtons.back.disabled = this.navIndex <= 0;
+    this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
   }
   // ============================================================
   // Typeahead / autocomplete

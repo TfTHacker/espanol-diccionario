@@ -11,6 +11,9 @@
 
 /* === Search === */
 .ed-search-container {
+	display: flex;
+	gap: 6px;
+	align-items: center;
 	margin-bottom: 12px;
 	flex-shrink: 0;
 	position: relative;
@@ -457,4 +460,41 @@
 /* Clickable words in definitions */
 .ed-def-text .ed-clickable-word {
 	font-weight: 500;
+}
+/* === Navigation buttons === */
+.ed-nav-buttons {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.ed-nav-btn {
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	padding: 4px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 16px;
+	line-height: 1;
+	min-width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.15s;
+}
+
+.ed-nav-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ed-nav-btn:disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
+.ed-nav-btn:active:not(:disabled) {
+	transform: scale(0.95);
 }

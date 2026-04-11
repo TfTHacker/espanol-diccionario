@@ -27,6 +27,11 @@ export class DictionaryView extends ItemView {
 	private currentResult: DictionaryResult | null = null;
 	private currentWord: string = "";
 
+	// Navigation history
+	private navHistory: string[] = [];
+	private navIndex = -1;
+	private navButtons!: { back: HTMLButtonElement; forward: HTMLButtonElement };
+
 	// Chat state
 	private chatMessages: ChatMessage[] = [];
 	private chatInput!: HTMLInputElement;
@@ -55,8 +60,28 @@ export class DictionaryView extends ItemView {
 		container.empty();
 		container.classList.add("espanol-diccionario");
 
-		// Search bar
+		// Search bar with navigation buttons
 		const searchDiv = container.createDiv({ cls: "ed-search-container" });
+
+		// Back/Forward navigation buttons
+		const navDiv = searchDiv.createDiv({ cls: "ed-nav-buttons" });
+		this.navButtons = {
+			back: navDiv.createEl("button", {
+				cls: "ed-nav-btn ed-nav-back",
+				attr: { type: "button", title: "Back (Alt+←)" },
+			}),
+			forward: navDiv.createEl("button", {
+				cls: "ed-nav-btn ed-nav-forward",
+				attr: { type: "button", title: "Forward (Alt+→)" },
+			}),
+		};
+		this.navButtons.back.setText("←");
+		this.navButtons.forward.setText("→");
+		this.navButtons.back.disabled = true;
+		this.navButtons.forward.disabled = true;
+		this.navButtons.back.addEventListener("click", () => this.navigateBack());
+		this.navButtons.forward.addEventListener("click", () => this.navigateForward());
+
 		const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
 
 		this.searchInput = searchForm.createEl("input", {
@@ -177,6 +202,17 @@ export class DictionaryView extends ItemView {
 
 		// Focus search input
 		this.searchInput.focus();
+
+		// Global keyboard shortcut for back/forward navigation
+		this.containerEl.addEventListener("keydown", (evt: KeyboardEvent) => {
+			if (evt.altKey && evt.key === "ArrowLeft") {
+				evt.preventDefault();
+				this.navigateBack();
+			} else if (evt.altKey && evt.key === "ArrowRight") {
+				evt.preventDefault();
+				this.navigateForward();
+			}
+		});
 	}
 
 	async onClose() {
@@ -232,6 +268,13 @@ export class DictionaryView extends ItemView {
 			return;
 		}
 
+		this.doLookup(word, true);
+	}
+
+	/**
+	 * Core lookup logic. pushHistory=true when user initiates search (not from navigation)
+	 */
+	private doLookup(word: string, pushHistory: boolean) {
 		const resultArea = this.containerEl.querySelector("#ed-result-area");
 		if (!resultArea) return;
 
@@ -247,6 +290,10 @@ export class DictionaryView extends ItemView {
 				this.currentWord = word;
 				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
 
+				if (pushHistory) {
+					this.pushNavHistory(word);
+				}
+
 				// Auto-play audio for Spanish words
 				if (result.word.lang === "es" && this.plugin.settings.autoPlayAudio) {
 					this.handlePlayAudio(resultArea.querySelector("[data-action='play-audio']") as HTMLElement);
@@ -255,6 +302,9 @@ export class DictionaryView extends ItemView {
 				this.currentResult = null;
 				this.currentWord = word;
 				resultArea.innerHTML = renderNotFound(word);
+				if (pushHistory) {
+					this.pushNavHistory(word);
+				}
 			}
 		} catch (err) {
 			resultArea.innerHTML = renderDbError(
@@ -299,7 +349,7 @@ export class DictionaryView extends ItemView {
 		// Update the search input and trigger lookup
 		this.searchInput.value = word;
 		this.hideTypeahead();
-		this.doSearch();
+		this.doLookup(word, true);
 	}
 
 	private toggleChat() {
@@ -368,6 +418,52 @@ export class DictionaryView extends ItemView {
 		}
 
 		this.isStreaming = false;
+	}
+
+	// ============================================================
+	// Navigation history
+	// ============================================================
+
+	private pushNavHistory(word: string) {
+		// Truncate any forward history
+		if (this.navIndex < this.navHistory.length - 1) {
+			this.navHistory = this.navHistory.slice(0, this.navIndex + 1);
+		}
+
+		// Don't push duplicate of current entry
+		if (this.navHistory.length > 0 && this.navHistory[this.navHistory.length - 1] === word) {
+			return;
+		}
+
+		this.navHistory.push(word);
+		this.navIndex = this.navHistory.length - 1;
+		this.updateNavButtons();
+	}
+
+	private navigateBack() {
+		if (this.navIndex <= 0) return;
+		this.navIndex--;
+		const word = this.navHistory[this.navIndex];
+		this.searchInput.value = word;
+		this.hideTypeahead();
+		this.doLookup(word, false);
+		this.updateNavButtons();
+	}
+
+	private navigateForward() {
+		if (this.navIndex >= this.navHistory.length - 1) return;
+		this.navIndex++;
+		const word = this.navHistory[this.navIndex];
+		this.searchInput.value = word;
+		this.hideTypeahead();
+		this.doLookup(word, false);
+		this.updateNavButtons();
+	}
+
+	private updateNavButtons() {
+		if (!this.navButtons) return;
+		this.navButtons.back.disabled = this.navIndex <= 0;
+		this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
 	}
 
 	// ============================================================
