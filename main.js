@@ -3125,6 +3125,7 @@ var DictionaryView = class extends import_obsidian3.ItemView {
 				</div>`;
       }
     }
+    this.loadHistory();
   }
   /**
    * Notify the view of a database error
@@ -3288,6 +3289,7 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     this.navHistory.push(word);
     this.navIndex = this.navHistory.length - 1;
     this.updateNavButtons();
+    this.saveHistory();
   }
   navigateBack() {
     if (this.navIndex <= 0) return;
@@ -3312,6 +3314,28 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     this.navButtons.back.disabled = this.navIndex <= 0;
     this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
     this.recentsBtn.disabled = this.navHistory.length === 0;
+  }
+  // ============================================================
+  // History persistence
+  // ============================================================
+  async loadHistory() {
+    try {
+      const data = await this.plugin.loadData();
+      if (data && Array.isArray(data.navHistory)) {
+        this.navHistory = data.navHistory;
+        this.navIndex = data.navHistory.length - 1;
+        this.updateNavButtons();
+      }
+    } catch {
+    }
+  }
+  async saveHistory() {
+    try {
+      const data = await this.plugin.loadData() || {};
+      data.navHistory = this.navHistory;
+      await this.plugin.saveData(data);
+    } catch {
+    }
   }
   /**
    * Toggle the recents dropdown.

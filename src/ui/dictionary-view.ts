@@ -264,6 +264,9 @@ export class DictionaryView extends ItemView {
 				</div>`;
 			}
 		}
+
+		// Restore navigation history from persisted storage
+		this.loadHistory();
 	}
 
 	/**
@@ -468,6 +471,7 @@ export class DictionaryView extends ItemView {
 		this.navHistory.push(word);
 		this.navIndex = this.navHistory.length - 1;
 		this.updateNavButtons();
+		this.saveHistory();
 	}
 
 	private navigateBack() {
@@ -495,6 +499,33 @@ export class DictionaryView extends ItemView {
 		this.navButtons.back.disabled = this.navIndex <= 0;
 		this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
 		this.recentsBtn.disabled = this.navHistory.length === 0;
+	}
+
+	// ============================================================
+	// History persistence
+	// ============================================================
+
+	private async loadHistory() {
+		try {
+			const data = await this.plugin.loadData();
+			if (data && Array.isArray(data.navHistory)) {
+				this.navHistory = data.navHistory;
+				this.navIndex = data.navHistory.length - 1;
+				this.updateNavButtons();
+			}
+		} catch {
+			// No saved history yet, start fresh
+		}
+	}
+
+	private async saveHistory() {
+		try {
+			const data = await this.plugin.loadData() || {};
+			data.navHistory = this.navHistory;
+			await this.plugin.saveData(data);
+		} catch {
+			// Silently fail — history is not critical
+		}
 	}
 
 	/**
