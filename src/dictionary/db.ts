@@ -171,6 +171,36 @@ export function closeDatabase(): void {
 }
 
 /**
+ * Force re-download of the dictionary database.
+ * Deletes the existing DB + WASM files, closes the DB, then re-initializes.
+ */
+export async function redownloadDatabase(app: any, pluginDir: string): Promise<void> {
+	console.log("[español-diccionario] Re-downloading database...");
+
+	// Close existing DB first
+	closeDatabase();
+
+	// Delete existing files
+	const filesToDelete = ["dictionary.db", "sql-wasm.wasm"];
+	for (const filename of filesToDelete) {
+		const filePath = `${pluginDir}/${filename}`;
+		try {
+			const exists = await app.vault.adapter.exists(filePath);
+			if (exists) {
+				await app.vault.adapter.remove(filePath);
+				console.log(`[español-diccionario] Deleted ${filename}`);
+			}
+		} catch (err) {
+			console.warn(`[español-diccionario] Could not delete ${filename}:`, err);
+		}
+	}
+
+	// Re-initialize (will download fresh copies)
+	await initDatabase(app, pluginDir);
+	console.log("[español-diccionario] Database re-downloaded successfully");
+}
+
+/**
  * Execute a query and return all rows as typed objects
  */
 function queryAll<T extends Record<string, any>>(sql: string, params: any[] = []): T[] {

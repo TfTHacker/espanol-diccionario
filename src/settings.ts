@@ -1,6 +1,7 @@
 // src/settings.ts — Plugin settings tab & defaults
 
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { redownloadDatabase } from "./dictionary/db";
 import type EspañolDiccionarioPlugin from "./main";
 
 export interface PluginSettings {
@@ -143,5 +144,31 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// Database settings
+		containerEl.createEl("h3", { text: "Database" });
+
+		new Setting(containerEl)
+			.setName("Re-download dictionary database")
+			.setDesc("Delete the local dictionary database and re-download the latest version from GitHub. Useful after a database update or if the database is corrupted.")
+			.addButton((button) => {
+				button.setButtonText("Re-download database").setClass("mod-warning").onClick(async () => {
+					button.setButtonText("Downloading...");
+					button.setDisabled(true);
+					try {
+						const app = this.app;
+						const pluginDir = `.obsidian/plugins/${this.plugin.manifest.id}`;
+						await redownloadDatabase(app, pluginDir);
+						button.setButtonText("Re-download database");
+						button.setDisabled(false);
+						new Notice("Dictionary database updated successfully!");
+					} catch (err) {
+						button.setButtonText("Re-download database");
+						button.setDisabled(false);
+						const msg = err instanceof Error ? err.message : String(err);
+						new Notice(`Failed to re-download database: ${msg}`);
+					}
+				});
+			});
 	}
 }
