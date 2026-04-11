@@ -2534,6 +2534,40 @@ async function fetchModels(serverUrl, apiKey) {
   models.sort((a, b) => a.id.localeCompare(b.id));
   return models;
 }
+var ModelPickerDialog = class extends import_obsidian2.Modal {
+  // EspañolDiccionarioPlugin
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("ed-model-picker-modal");
+    contentEl.createEl("h2", { text: "Select LLM Model" });
+    const pickerEl = contentEl.createDiv({ cls: "ed-model-picker" });
+    showModelPicker(
+      pickerEl,
+      this.plugin.settings.llmServerUrl,
+      this.plugin.settings.llmApiKey,
+      async (modelId) => {
+        this.plugin.settings.llmModel = modelId;
+        await this.plugin.saveSettings();
+        this.close();
+        const leaves = this.app.workspace.getLeavesOfType("espanol-diccionario-view");
+        for (const leaf of leaves) {
+          if (leaf.view && typeof leaf.view.updateChatModelLabel === "function") {
+            leaf.view.updateChatModelLabel();
+          }
+        }
+      }
+    );
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
 
 // src/settings.ts
 var DEFAULT_SETTINGS = {
@@ -3281,6 +3315,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     chatToggle.setText("\u{1F4AC} Chat about this word");
     chatToggle.addEventListener("click", () => this.toggleChat());
     this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
+    this.chatModelLabel = this.chatContainer.createDiv({ cls: "ed-chat-model-label" });
     const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
     const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
     this.chatInput = chatForm.createEl("input", {
@@ -3314,6 +3349,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     });
     this.searchInput.focus();
     this.loadHistory();
+    this.updateChatModelLabel();
     this.containerEl.addEventListener("keydown", (evt) => {
       if (evt.altKey && evt.key === "ArrowLeft") {
         evt.preventDefault();
@@ -3459,8 +3495,15 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       toggle.textContent = isHidden ? "\u{1F4AC} Chat about this word" : "\u{1F4AC} Hide chat";
     }
     if (!this.chatContainer.classList.contains("ed-hidden")) {
+      this.updateChatModelLabel();
       this.chatInput.focus();
     }
+  }
+  updateChatModelLabel() {
+    if (!this.chatModelLabel) return;
+    const model = this.plugin.settings.llmModel || "(no model)";
+    const server = this.plugin.settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
+    this.chatModelLabel.textContent = `Model: ${model} \xB7 ${server}`;
   }
   async sendChat() {
     const userText = this.chatInput.value.trim();
@@ -3782,6 +3825,11 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
       name: "Open dictionary",
       callback: () => this.activateView()
     });
+    this.addCommand({
+      id: "change-llm-model",
+      name: "Change LLM model",
+      callback: () => this.openModelPicker()
+    });
     this.addSettingTab(new Espa\u00F1olDiccionarioSettingTab(this.app, this));
     this.initDatabaseAsync();
   }
@@ -3794,6 +3842,13 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  /**
+   * Open a model picker dialog (command palette)
+   */
+  async openModelPicker() {
+    const modal = new ModelPickerDialog(this.app, this);
+    modal.open();
   }
   /**
    * Open or focus the dictionary view

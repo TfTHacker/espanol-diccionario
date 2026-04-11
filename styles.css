@@ -793,3 +793,22 @@
 	text-align: center;
 	font-style: italic;
 }
+
+/* === Chat model label === */
+.ed-chat-model-label {
+	font-size: 11px;
+	color: var(--text-faint);
+	padding: 2px 4px 6px;
+	margin-bottom: 0;
+	font-family: var(--font-monospace);
+	letter-spacing: 0.02em;
+}
+
+/* === Model picker modal === */
+.modal.ed-model-picker-modal {
+	max-width: 600px;
+}
+
+.modal.ed-model-picker-modal .modal-content {
+	padding: 16px;
+}

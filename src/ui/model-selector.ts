@@ -1,6 +1,7 @@
-// src/ui/model-selector.ts — Inline model selector for settings
+// src/ui/model-selector.ts — Model selector for settings & command palette
 
-import { Notice, requestUrl } from "obsidian";
+import { App, Modal, Notice, requestUrl } from "obsidian";
+import type EspañolDiccionarioPlugin from "../main";
 
 interface ModelInfo {
 	id: string;
@@ -152,4 +153,50 @@ async function fetchModels(serverUrl: string, apiKey: string): Promise<ModelInfo
 
 	models.sort((a, b) => a.id.localeCompare(b.id));
 	return models;
+}
+
+/**
+ * Modal dialog for picking a model (used from command palette).
+ */
+export class ModelPickerDialog extends Modal {
+	private plugin: any; // EspañolDiccionarioPlugin
+
+	constructor(app: App, plugin: any) {
+		super(app);
+		this.plugin = plugin;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass("ed-model-picker-modal");
+
+		contentEl.createEl("h2", { text: "Select LLM Model" });
+
+		const pickerEl = contentEl.createDiv({ cls: "ed-model-picker" });
+
+		showModelPicker(
+			pickerEl,
+			this.plugin.settings.llmServerUrl,
+			this.plugin.settings.llmApiKey,
+			async (modelId: string) => {
+				this.plugin.settings.llmModel = modelId;
+				await this.plugin.saveSettings();
+				this.close();
+
+				// Notify any open dictionary views to update model label
+				const leaves = this.app.workspace.getLeavesOfType("espanol-diccionario-view");
+				for (const leaf of leaves) {
+					if (leaf.view && typeof (leaf.view as any).updateChatModelLabel === "function") {
+						(leaf.view as any).updateChatModelLabel();
+					}
+				}
+			}
+		);
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
 }

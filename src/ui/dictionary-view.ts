@@ -38,6 +38,7 @@ export class DictionaryView extends ItemView {
 	private chatMessages: ChatMessage[] = [];
 	private chatInput!: HTMLInputElement;
 	private chatContainer!: HTMLElement;
+	private chatModelLabel!: HTMLElement;
 	private isStreaming = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
@@ -184,6 +185,10 @@ export class DictionaryView extends ItemView {
 		chatToggle.addEventListener("click", () => this.toggleChat());
 
 		this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
+
+		// Model label
+		this.chatModelLabel = this.chatContainer.createDiv({ cls: "ed-chat-model-label" });
+
 		const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
 
 		const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
@@ -226,6 +231,9 @@ export class DictionaryView extends ItemView {
 
 		// Restore navigation history from persisted storage
 		this.loadHistory();
+
+		// Update model label
+		this.updateChatModelLabel();
 
 		// Global keyboard shortcut for back/forward navigation
 		this.containerEl.addEventListener("keydown", (evt: KeyboardEvent) => {
@@ -399,8 +407,16 @@ export class DictionaryView extends ItemView {
 			toggle.textContent = isHidden ? "💬 Chat about this word" : "💬 Hide chat";
 		}
 		if (!this.chatContainer.classList.contains("ed-hidden")) {
+			this.updateChatModelLabel();
 			this.chatInput.focus();
 		}
+	}
+
+	private updateChatModelLabel() {
+		if (!this.chatModelLabel) return;
+		const model = this.plugin.settings.llmModel || "(no model)";
+		const server = this.plugin.settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
+		this.chatModelLabel.textContent = `Model: ${model} · ${server}`;
 	}
 
 	private async sendChat() {

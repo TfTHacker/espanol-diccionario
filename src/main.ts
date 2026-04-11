@@ -4,6 +4,7 @@ import { Notice, Plugin, Platform } from "obsidian";
 import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
+import { showModelPicker, ModelPickerDialog } from "./ui/model-selector";
 import { initDatabase, isDatabaseReady } from "./dictionary/db";
 
 export default class EspañolDiccionarioPlugin extends Plugin {
@@ -29,11 +30,17 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			this.activateView();
 		});
 
-		// Add command palette command
+		// Add command palette commands
 		this.addCommand({
 			id: "open-dictionary",
 			name: "Open dictionary",
 			callback: () => this.activateView(),
+		});
+
+		this.addCommand({
+			id: "change-llm-model",
+			name: "Change LLM model",
+			callback: () => this.openModelPicker(),
 		});
 
 		// Settings tab
@@ -55,6 +62,15 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	/**
+	 * Open a model picker dialog (command palette)
+	 */
+	async openModelPicker() {
+		// Create a temporary dialog
+		const modal = new ModelPickerDialog(this.app, this);
+		modal.open();
 	}
 
 	/**
