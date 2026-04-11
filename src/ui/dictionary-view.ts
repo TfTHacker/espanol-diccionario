@@ -39,6 +39,9 @@ export class DictionaryView extends ItemView {
 	private chatInput!: HTMLInputElement;
 	private chatContainer!: HTMLElement;
 	private chatModelLabel!: HTMLElement;
+	private chatHistoryIndex = -1; // -1 means not navigating history
+	private chatRecentsDropdown!: HTMLElement;
+	private chatInputBeforeHistory = ""; // stores current input when navigating history
 	private isStreaming = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
@@ -186,8 +189,15 @@ export class DictionaryView extends ItemView {
 
 		this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
 
-		// Model label
-		this.chatModelLabel = this.chatContainer.createDiv({ cls: "ed-chat-model-label" });
+		// Model label + clear button toolbar
+		const chatToolbar = this.chatContainer.createDiv({ cls: "ed-chat-toolbar" });
+		this.chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
+		const clearBtn = chatToolbar.createEl("button", {
+			cls: "ed-chat-clear-btn",
+			attr: { type: "button", title: "Clear chat" },
+		});
+		clearBtn.setText("\u{1F5D1} Clear");
+		clearBtn.addEventListener("click", () => this.clearChat());
 
 		const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
 
@@ -199,11 +209,33 @@ export class DictionaryView extends ItemView {
 				placeholder: "Ask a question about this word or Spanish grammar...",
 			},
 		});
-		const chatSendBtn = chatForm.createEl("button", {
+
+		// Arrow key navigation for prompt history
+		this.chatInput.addEventListener("keydown", (evt) => {
+			if (evt.key === "ArrowUp" || evt.key === "ArrowDown") {
+				evt.preventDefault();
+				this.navigateChatHistory(evt.key === "ArrowUp" ? -1 : 1);
+			}
+		});
+
+		const chatActions = chatForm.createDiv({ cls: "ed-chat-actions" });
+		const chatRecentsBtn = chatActions.createEl("button", {
+			cls: "ed-chat-recents-btn",
+			attr: { type: "button", title: "Prompt history" },
+		});
+		chatRecentsBtn.setText("\u{1F552}");
+		chatRecentsBtn.addEventListener("click", (evt) => {
+			evt.stopPropagation();
+			this.toggleChatRecents();
+		});
+		const chatSendBtn = chatActions.createEl("button", {
 			cls: "ed-chat-send-btn",
 			attr: { type: "submit" },
 		});
 		chatSendBtn.setText("Send");
+
+		// Chat prompt history dropdown
+		this.chatRecentsDropdown = this.chatContainer.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
 
 		chatForm.addEventListener("submit", (evt) => {
 			evt.preventDefault();
@@ -216,6 +248,9 @@ export class DictionaryView extends ItemView {
 			// Close recents if clicking outside the dropdown
 			if (!target.closest(".ed-recents") && !target.closest(".ed-nav-recents-btn")) {
 				this.hideRecents();
+			}
+			if (!target.closest(".ed-chat-recents-dropdown") && !target.closest(".ed-chat-recents-btn")) {
+				this.chatRecentsDropdown?.classList.add("ed-hidden");
 			}
 			if (target.closest("[data-action='play-audio']")) {
 				this.handlePlayAudio(target.closest("[data-action='play-audio']") as HTMLElement);
@@ -419,12 +454,96 @@ export class DictionaryView extends ItemView {
 		this.chatModelLabel.textContent = `Model: ${model} · ${server}`;
 	}
 
+	private clearChat() {
+		this.chatMessages = [];
+		const messagesContainer = this.containerEl.querySelector("#ed-chat-messages");
+		if (messagesContainer) {
+			messagesContainer.empty();
+		}
+	}
+
+	private navigateChatHistory(direction: -1 | 1) {
+		const history = this.plugin.settings.chatPromptHistory;
+		if (history.length === 0) return;
+
+		if (this.chatHistoryIndex === -1) {
+			// Save current input before navigating
+			this.chatInputBeforeHistory = this.chatInput.value;
+		}
+
+		const newIndex = this.chatHistoryIndex === -1
+			? (direction === -1 ? history.length - 1 : -1)
+			: this.chatHistoryIndex + direction;
+
+		if (newIndex < 0 || newIndex >= history.length) {
+			// Went past bounds — restore original input
+			this.chatHistoryIndex = -1;
+			this.chatInput.value = this.chatInputBeforeHistory;
+		} else {
+			this.chatHistoryIndex = newIndex;
+			this.chatInput.value = history[newIndex];
+		}
+
+		// Move cursor to end
+		this.chatInput.focus();
+		this.chatInput.setSelectionRange(this.chatInput.value.length, this.chatInput.value.length);
+	}
+
+	private toggleChatRecents() {
+		const dropdown = this.chatRecentsDropdown;
+		if (!dropdown.classList.contains("ed-hidden")) {
+			dropdown.classList.add("ed-hidden");
+			return;
+		}
+
+		// Render the prompt history list
+		dropdown.empty();
+		const history = this.plugin.settings.chatPromptHistory;
+
+		if (history.length === 0) {
+			dropdown.createDiv({ cls: "ed-chat-recents-empty", text: "No prompts yet" });
+		} else {
+			// Show most recent first
+			for (let i = history.length - 1; i >= 0; i--) {
+				const item = dropdown.createDiv({ cls: "ed-chat-recents-item" });
+				item.textContent = history[i];
+				item.addEventListener("click", (evt) => {
+					evt.stopPropagation();
+					this.chatInput.value = history[i];
+					this.chatInput.focus();
+					dropdown.classList.add("ed-hidden");
+				});
+			}
+
+			// Clear all button
+			const clearHistory = dropdown.createDiv({ cls: "ed-chat-recents-clear" });
+			clearHistory.textContent = "Clear all prompts";
+			clearHistory.addEventListener("click", async (evt) => {
+				evt.stopPropagation();
+				this.plugin.settings.chatPromptHistory = [];
+				await this.plugin.saveSettings();
+				dropdown.classList.add("ed-hidden");
+			});
+		}
+
+		dropdown.classList.remove("ed-hidden");
+	}
+
 	private async sendChat() {
 		const userText = this.chatInput.value.trim();
 		if (!userText || this.isStreaming) return;
 
 		this.chatInput.value = "";
 		this.isStreaming = true;
+
+		// Save to prompt history (avoid duplicates at top)
+		const hist = this.plugin.settings.chatPromptHistory;
+		if (hist[hist.length - 1] !== userText) {
+			hist.push(userText);
+			if (hist.length > 100) hist.shift(); // cap at 100
+			await this.plugin.saveSettings();
+		}
+		this.chatHistoryIndex = -1; // reset navigation
 
 		// Add user message
 		this.chatMessages.push({ role: "user", content: userText });

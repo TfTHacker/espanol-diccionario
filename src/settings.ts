@@ -14,6 +14,7 @@ export interface PluginSettings {
 	maxSentences: number;
 	autoPlayAudio: boolean;
 	navHistory: string[];
+	chatPromptHistory: string[];
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -29,6 +30,7 @@ language the user writes in (English or Spanish).`,
 	maxSentences: 5,
 	autoPlayAudio: false,
 	navHistory: [],
+	chatPromptHistory: [],
 };
 
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {
