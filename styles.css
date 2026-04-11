@@ -9,6 +9,17 @@
 	overflow: hidden;
 }
 
+.espanol-diccionario .ed-chat-msg,
+.espanol-diccionario .ed-chat-assistant,
+.espanol-diccionario .ed-chat-user,
+.espanol-diccionario .ed-chat-assistant p,
+.espanol-diccionario .ed-chat-assistant li,
+.espanol-diccionario .ed-chat-assistant code,
+.espanol-diccionario .ed-chat-assistant blockquote {
+	user-select: text;
+	-webkit-user-select: text;
+}
+
 /* === Search === */
 .ed-search-container {
 	display: flex;
@@ -295,6 +306,8 @@
 	flex: 1;
 	overflow-y: auto;
 	padding: 8px 0;
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .ed-chat-msg {
@@ -305,6 +318,8 @@
 	line-height: 1.5;
 	max-width: 90%;
 	word-wrap: break-word;
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .ed-chat-user {
@@ -312,6 +327,8 @@
 	color: var(--text-on-accent);
 	margin-left: auto;
 	border-bottom-right-radius: 2px;
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .ed-chat-assistant {
@@ -319,6 +336,8 @@
 	color: var(--text-normal);
 	margin-right: auto;
 	border-bottom-left-radius: 2px;
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .ed-chat-assistant .internal-embed {
