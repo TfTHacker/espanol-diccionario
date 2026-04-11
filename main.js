@@ -2435,11 +2435,107 @@ __export(main_exports, {
   default: () => Espa\u00F1olDiccionarioPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/settings.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 init_db();
+
+// src/ui/model-selector.ts
+var import_obsidian2 = require("obsidian");
+async function showModelPicker(container, serverUrl, apiKey, onChoose) {
+  container.empty();
+  container.createEl("h4", { text: "Loading models..." });
+  try {
+    const models = await fetchModels(serverUrl, apiKey);
+    if (models.length === 0) {
+      container.empty();
+      container.createEl("h4", { text: "No models found" });
+      container.createEl("p", {
+        text: "Check your server URL and API key in the settings above.",
+        cls: "ed-model-empty"
+      });
+      return;
+    }
+    renderModelList(container, models, onChoose);
+  } catch (err) {
+    container.empty();
+    container.createEl("h4", { text: "Error fetching models" });
+    container.createEl("p", {
+      text: err instanceof Error ? err.message : String(err),
+      cls: "ed-model-error"
+    });
+  }
+}
+function renderModelList(container, models, onChoose) {
+  container.empty();
+  container.createEl("h4", { text: `Select a model (${models.length} available)` });
+  const filterInput = container.createEl("input", {
+    type: "text",
+    cls: "ed-model-filter",
+    attr: { placeholder: "Filter models...", autofocus: "true" }
+  });
+  const listEl = container.createDiv({ cls: "ed-model-list" });
+  function renderFiltered() {
+    const query = filterInput.value.toLowerCase().trim();
+    listEl.empty();
+    const filtered = query ? models.filter((m) => m.id.toLowerCase().includes(query)) : models;
+    if (filtered.length === 0) {
+      listEl.createDiv({ cls: "ed-model-empty", text: "No models match your filter." });
+      return;
+    }
+    const shown = filtered.slice(0, 50);
+    for (const model of shown) {
+      const item = listEl.createDiv({ cls: "ed-model-item" });
+      item.createDiv({ cls: "ed-model-name", text: model.id });
+      if (model.owned_by) {
+        const meta = item.createDiv({ cls: "ed-model-meta" });
+        meta.createSpan({ cls: "ed-model-provider", text: model.owned_by });
+      }
+      item.addEventListener("click", () => {
+        onChoose(model.id);
+      });
+    }
+    if (filtered.length > 50) {
+      listEl.createDiv({ cls: "ed-model-more", text: `...and ${filtered.length - 50} more. Type to narrow results.` });
+    }
+  }
+  renderFiltered();
+  filterInput.addEventListener("input", renderFiltered);
+  setTimeout(() => filterInput.focus(), 100);
+}
+async function fetchModels(serverUrl, apiKey) {
+  let url = serverUrl.replace(/\/+$/, "");
+  url = url.replace(/\/v1\/chat\/completions$/, "").replace(/\/api\/chat$/, "").replace(/\/chat\/completions$/, "");
+  const isLocalOllama = url.includes("localhost:11434") || url.includes("127.0.0.1:11434");
+  const modelsUrl = isLocalOllama ? `${url}/api/tags` : url.includes("/v1") ? `${url}/models` : `${url}/v1/models`;
+  const headers = {};
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+  const response = await (0, import_obsidian2.requestUrl)({
+    url: modelsUrl,
+    method: "GET",
+    headers
+  });
+  const data = response.json;
+  let models = [];
+  if (isLocalOllama && data.models) {
+    models = data.models.map((m) => ({
+      id: m.name || m.model,
+      owned_by: "ollama"
+    }));
+  } else if (data.data && Array.isArray(data.data)) {
+    models = data.data.map((m) => ({
+      id: m.id,
+      owned_by: m.owned_by || ""
+    }));
+  }
+  models.sort((a, b) => a.id.localeCompare(b.id));
+  return models;
+}
+
+// src/settings.ts
 var DEFAULT_SETTINGS = {
   llmServerUrl: "https://ollama.com",
   llmApiKey: "",
@@ -2454,7 +2550,7 @@ language the user writes in (English or Spanish).`,
   autoPlayAudio: false,
   navHistory: []
 };
-var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSettingTab {
+var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -2464,38 +2560,58 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
     containerEl.empty();
     containerEl.createEl("h2", { text: "Espa\xF1ol Diccionario Settings" });
     containerEl.createEl("h3", { text: "LLM Chat" });
-    new import_obsidian2.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud. For local Ollama use http://localhost:11434. For OpenAI use https://api.openai.com/v1.").addText(
+    new import_obsidian3.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud. For local Ollama use http://localhost:11434. For OpenAI use https://api.openai.com/v1.").addText(
       (text) => text.setPlaceholder("https://ollama.com").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
         this.plugin.settings.llmServerUrl = value.trim();
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("API Key").setDesc("Required for cloud providers. Leave empty for local Ollama (no auth). Stored securely in your vault (never published).").addText((text) => {
+    new import_obsidian3.Setting(containerEl).setName("API Key").setDesc("Required for cloud providers. Leave empty for local Ollama (no auth). Stored securely in your vault (never published).").addText((text) => {
       text.setPlaceholder("sk-...").setValue(this.plugin.settings.llmApiKey).onChange(async (value) => {
         this.plugin.settings.llmApiKey = value;
         await this.plugin.saveSettings();
       });
       text.inputEl.type = "password";
     });
-    new import_obsidian2.Setting(containerEl).setName("Model").setDesc("Model name as recognized by your LLM server (e.g., gemma3:4b, llama3, gpt-4o-mini, etc.)").addText(
+    new import_obsidian3.Setting(containerEl).setName("Model").setDesc("Click the button to browse available models from your LLM server, or type a model name manually.").addText(
       (text) => text.setPlaceholder("gemma3:4b").setValue(this.plugin.settings.llmModel).onChange(async (value) => {
         this.plugin.settings.llmModel = value.trim();
         await this.plugin.saveSettings();
       })
+    ).addButton(
+      (button) => button.setButtonText("Browse models...").onClick(() => {
+        const existing = containerEl.querySelector(".ed-model-picker");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+        const pickerEl = containerEl.createDiv({ cls: "ed-model-picker" });
+        showModelPicker(
+          pickerEl,
+          this.plugin.settings.llmServerUrl,
+          this.plugin.settings.llmApiKey,
+          async (modelId) => {
+            this.plugin.settings.llmModel = modelId;
+            await this.plugin.saveSettings();
+            pickerEl.remove();
+            this.display();
+          }
+        );
+      })
     );
-    new import_obsidian2.Setting(containerEl).setName("Temperature").setDesc("Controls randomness. Lower = more deterministic, higher = more creative. (0\u20131)").addSlider(
+    new import_obsidian3.Setting(containerEl).setName("Temperature").setDesc("Controls randomness. Lower = more deterministic, higher = more creative. (0\u20131)").addSlider(
       (slider) => slider.setLimits(0, 1, 0.1).setValue(this.plugin.settings.llmTemperature).setDynamicTooltip().onChange(async (value) => {
         this.plugin.settings.llmTemperature = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("System Prompt").setDesc("Custom system prompt for the LLM chat. Tailored for Spanish tutoring.").addTextArea(
+    new import_obsidian3.Setting(containerEl).setName("System Prompt").setDesc("Custom system prompt for the LLM chat. Tailored for Spanish tutoring.").addTextArea(
       (text) => text.setPlaceholder("You are a helpful Spanish language tutor...").setValue(this.plugin.settings.systemPrompt).onChange(async (value) => {
         this.plugin.settings.systemPrompt = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, and system prompt to their defaults.").addButton(
+    new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, and system prompt to their defaults.").addButton(
       (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
         this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
         this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
@@ -2507,14 +2623,14 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
       })
     );
     containerEl.createEl("h3", { text: "Audio" });
-    new import_obsidian2.Setting(containerEl).setName("Auto-play pronunciation").setDesc("Automatically play audio pronunciation when looking up a Spanish word.").addToggle(
+    new import_obsidian3.Setting(containerEl).setName("Auto-play pronunciation").setDesc("Automatically play audio pronunciation when looking up a Spanish word.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.autoPlayAudio).onChange(async (value) => {
         this.plugin.settings.autoPlayAudio = value;
         await this.plugin.saveSettings();
       })
     );
     containerEl.createEl("h3", { text: "Display" });
-    new import_obsidian2.Setting(containerEl).setName("Max example sentences").setDesc("Maximum number of example sentences to display per word (1\u201320).").addSlider(
+    new import_obsidian3.Setting(containerEl).setName("Max example sentences").setDesc("Maximum number of example sentences to display per word (1\u201320).").addSlider(
       (slider) => slider.setLimits(1, 20, 1).setValue(this.plugin.settings.maxSentences).setDynamicTooltip().onChange(async (value) => {
         this.plugin.settings.maxSentences = value;
         await this.plugin.saveSettings();
@@ -2531,11 +2647,11 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
         `\u{1F4AC} Sentences: ${stats.sentences.toLocaleString()}`,
         `\u{1F4BE} Database size: ${stats.dbSizeMB} MB`
       ];
-      new import_obsidian2.Setting(containerEl).setName("Dictionary statistics").setDesc(statsLines.join("\n"));
+      new import_obsidian3.Setting(containerEl).setName("Dictionary statistics").setDesc(statsLines.join("\n"));
     } else {
-      new import_obsidian2.Setting(containerEl).setName("Dictionary statistics").setDesc("Database not loaded yet. Open the dictionary view first.");
+      new import_obsidian3.Setting(containerEl).setName("Dictionary statistics").setDesc("Database not loaded yet. Open the dictionary view first.");
     }
-    new import_obsidian2.Setting(containerEl).setName("Re-download dictionary database").setDesc("Delete the local dictionary database and re-download the latest version from GitHub. Useful after a database update or if the database is corrupted.").addButton((button) => {
+    new import_obsidian3.Setting(containerEl).setName("Re-download dictionary database").setDesc("Delete the local dictionary database and re-download the latest version from GitHub.").addButton((button) => {
       button.setButtonText("Re-download database").setClass("mod-warning").onClick(async () => {
         button.setButtonText("Downloading...");
         button.setDisabled(true);
@@ -2545,13 +2661,13 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
           await redownloadDatabase(app, pluginDir);
           button.setButtonText("Re-download database");
           button.setDisabled(false);
-          new import_obsidian2.Notice("Dictionary database updated successfully!");
+          new import_obsidian3.Notice("Dictionary database updated successfully!");
           this.display();
         } catch (err) {
           button.setButtonText("Re-download database");
           button.setDisabled(false);
           const msg = err instanceof Error ? err.message : String(err);
-          new import_obsidian2.Notice(`Failed to re-download database: ${msg}`);
+          new import_obsidian3.Notice(`Failed to re-download database: ${msg}`);
         }
       });
     });
@@ -2559,7 +2675,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian2.PluginSet
 };
 
 // src/ui/dictionary-view.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/dictionary/lookup.ts
 init_db();
@@ -2645,7 +2761,7 @@ async function playAudio(word) {
 }
 
 // src/chat/provider.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 function buildApiUrl(serverUrl) {
   const base = serverUrl.replace(/\/+$/, "");
   const isOllama = base.includes("localhost:11434") || base.includes("127.0.0.1:11434");
@@ -2692,7 +2808,7 @@ The user just looked up the word: "${wordContext}". Use this as context for your
     stream: false
   });
   try {
-    const response = await (0, import_obsidian3.requestUrl)({
+    const response = await (0, import_obsidian4.requestUrl)({
       url: apiUrl,
       method: "POST",
       headers,
@@ -2724,7 +2840,7 @@ The user just looked up the word: "${wordContext}". Use this as context for your
   }
 }
 async function streamChatMessage(messages, settings, onChunk, wordContext) {
-  if (import_obsidian3.Platform.isMobile) {
+  if (import_obsidian4.Platform.isMobile) {
     const response = await sendChatMessage(messages, settings, wordContext);
     if (response.message) {
       onChunk(response.message);
@@ -3038,7 +3154,7 @@ function escapeHtml(text) {
 
 // src/ui/dictionary-view.ts
 var VIEW_TYPE_ESPANOL_DICCIONARIO = "espanol-diccionario-view";
-var DictionaryView = class extends import_obsidian4.ItemView {
+var DictionaryView = class extends import_obsidian5.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.searchTimeout = null;
@@ -3309,11 +3425,11 @@ var DictionaryView = class extends import_obsidian4.ItemView {
         });
       } else {
         btn.textContent = "\u{1F50A} Listen";
-        new import_obsidian4.Notice("Failed to play audio. Check your internet connection.");
+        new import_obsidian5.Notice("Failed to play audio. Check your internet connection.");
       }
     } catch (err) {
       btn.textContent = "\u{1F50A} Listen";
-      new import_obsidian4.Notice("Failed to load audio.");
+      new import_obsidian5.Notice("Failed to load audio.");
     }
   }
   handleWordClick(el) {
@@ -3329,7 +3445,7 @@ var DictionaryView = class extends import_obsidian4.ItemView {
     const url = el.dataset.url;
     const title = el.dataset.title;
     if (!url) return;
-    if (import_obsidian4.Platform.isMobile) {
+    if (import_obsidian5.Platform.isMobile) {
       window.open(url, "_blank");
       return;
     }
@@ -3548,9 +3664,9 @@ var DictionaryView = class extends import_obsidian4.ItemView {
 };
 
 // src/ui/web-view.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 var VIEW_TYPE_WEB = "espanol-diccionario-web";
-var WebView = class extends import_obsidian5.ItemView {
+var WebView = class extends import_obsidian6.ItemView {
   constructor(leaf) {
     super(leaf);
     this.url = "";
@@ -3643,7 +3759,7 @@ var WebView = class extends import_obsidian5.ItemView {
 
 // src/main.ts
 init_db();
-var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian6.Plugin {
+var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -3653,7 +3769,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian6.Plugin {
     this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
       return new DictionaryView(leaf, this);
     });
-    if (!import_obsidian6.Platform.isMobile) {
+    if (!import_obsidian7.Platform.isMobile) {
       this.registerView(VIEW_TYPE_WEB, (leaf) => {
         return new WebView(leaf);
       });
@@ -3734,7 +3850,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian6.Plugin {
           leaf.view.notifyDatabaseReady();
         }
       }
-      new import_obsidian6.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
+      new import_obsidian7.Notice("Espa\xF1ol Diccionario: Dictionary loaded");
     } catch (err) {
       console.error("[espanol-diccionario] Database init failed:", err);
       const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO);
@@ -3745,7 +3861,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian6.Plugin {
           );
         }
       }
-      new import_obsidian6.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
+      new import_obsidian7.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
     }
   }
   /**

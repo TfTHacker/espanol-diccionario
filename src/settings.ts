@@ -3,6 +3,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { getDatabaseStats, redownloadDatabase } from "./dictionary/db";
 import type EspañolDiccionarioPlugin from "./main";
+import { showModelPicker } from "./ui/model-selector";
 
 export interface PluginSettings {
 	llmServerUrl: string;
@@ -77,7 +78,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Model")
-			.setDesc("Model name as recognized by your LLM server (e.g., gemma3:4b, llama3, gpt-4o-mini, etc.)")
+			.setDesc("Click the button to browse available models from your LLM server, or type a model name manually.")
 			.addText((text) =>
 				text
 					.setPlaceholder("gemma3:4b")
@@ -85,6 +86,30 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.llmModel = value.trim();
 						await this.plugin.saveSettings();
+					})
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Browse models...")
+					.onClick(() => {
+						// Toggle the model picker panel
+						const existing = containerEl.querySelector(".ed-model-picker");
+						if (existing) {
+							existing.remove();
+							return;
+						}
+						const pickerEl = containerEl.createDiv({ cls: "ed-model-picker" });
+						showModelPicker(
+							pickerEl,
+							this.plugin.settings.llmServerUrl,
+							this.plugin.settings.llmApiKey,
+							async (modelId: string) => {
+								this.plugin.settings.llmModel = modelId;
+								await this.plugin.saveSettings();
+								pickerEl.remove();
+								this.display();
+							}
+						);
 					})
 			);
 
@@ -130,7 +155,6 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
 						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
 						await this.plugin.saveSettings();
-						// Refresh the settings panel
 						this.display();
 					})
 			);
@@ -192,7 +216,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Re-download dictionary database")
-			.setDesc("Delete the local dictionary database and re-download the latest version from GitHub. Useful after a database update or if the database is corrupted.")
+			.setDesc("Delete the local dictionary database and re-download the latest version from GitHub.")
 			.addButton((button) => {
 				button.setButtonText("Re-download database").setClass("mod-warning").onClick(async () => {
 					button.setButtonText("Downloading...");
@@ -201,10 +225,9 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						const app = this.app;
 						const pluginDir = `.obsidian/plugins/${this.plugin.manifest.id}`;
 						await redownloadDatabase(app, pluginDir);
-					button.setButtonText("Re-download database");
-					button.setDisabled(false);
-					new Notice("Dictionary database updated successfully!");
-						// Refresh stats after re-download
+						button.setButtonText("Re-download database");
+						button.setDisabled(false);
+						new Notice("Dictionary database updated successfully!");
 						this.display();
 					} catch (err) {
 						button.setButtonText("Re-download database");
