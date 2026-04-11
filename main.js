@@ -2734,13 +2734,18 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         })
       );
     }
-    new import_obsidian3.Setting(containerEl).setName("Prompt when word not found").setDesc("Use {word} for the searched word, {source} for the detected source language, and {target} for the target language.").addTextArea((text) => {
+    containerEl.createEl("h4", { text: "Not-found prompt" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: 'When a word is not found in the dictionary, an "Ask AI about this word" link appears. This prompt is sent to the LLM when that link is clicked.'
+    });
+    new import_obsidian3.Setting(containerEl).setName("Not-found prompt").setDesc("Use {word} for the searched word, {source} for the detected source language (Spanish/English), and {target} for the target language.").addTextArea((text) => {
       text.setPlaceholder(DEFAULT_SETTINGS.notFoundPrompt).setValue(this.plugin.settings.notFoundPrompt).onChange(async (value) => {
         this.plugin.settings.notFoundPrompt = value;
         await this.plugin.saveSettings();
       });
       text.inputEl.rows = 3;
-      text.inputEl.cols = 50;
+      text.inputEl.style.width = "100%";
     });
     new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, system prompt, suggestion prompts, and not-found prompt to their defaults.").addButton(
       (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {

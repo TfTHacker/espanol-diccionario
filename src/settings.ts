@@ -172,10 +172,16 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 				);
 		}
 
-		// "Not found" prompt
+		// Not-found prompt
+		containerEl.createEl("h4", { text: "Not-found prompt" });
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: "When a word is not found in the dictionary, an \"Ask AI about this word\" link appears. This prompt is sent to the LLM when that link is clicked.",
+		});
+
 		new Setting(containerEl)
-			.setName("Prompt when word not found")
-			.setDesc("Use {word} for the searched word, {source} for the detected source language, and {target} for the target language.")
+			.setName("Not-found prompt")
+			.setDesc("Use {word} for the searched word, {source} for the detected source language (Spanish/English), and {target} for the target language.")
 			.addTextArea((text) => {
 				text
 					.setPlaceholder(DEFAULT_SETTINGS.notFoundPrompt)
@@ -185,7 +191,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.rows = 3;
-				text.inputEl.cols = 50;
+				text.inputEl.style.width = "100%";
 			});
 
 		// Reset LLM settings to defaults
