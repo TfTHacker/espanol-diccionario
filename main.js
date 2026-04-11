@@ -2939,6 +2939,14 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     this.navButtons.forward.disabled = true;
     this.navButtons.back.addEventListener("click", () => this.navigateBack());
     this.navButtons.forward.addEventListener("click", () => this.navigateForward());
+    this.recentsBtn = navDiv.createEl("button", {
+      cls: "ed-nav-btn ed-nav-recents-btn",
+      attr: { type: "button", title: "Recent words" }
+    });
+    this.recentsBtn.setText("\u{1F550}");
+    this.recentsBtn.disabled = true;
+    this.recentsBtn.addEventListener("click", () => this.toggleRecents());
+    this.recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
     const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
     this.searchInput = searchForm.createEl("input", {
       type: "text",
@@ -2956,6 +2964,7 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     searchBtn.setText("\u{1F50D}");
     searchForm.addEventListener("submit", (evt) => {
       evt.preventDefault();
+      this.hideRecents();
       this.doSearch();
     });
     this.typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
@@ -3028,6 +3037,9 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     });
     container.addEventListener("click", (evt) => {
       const target = evt.target;
+      if (!target.closest(".ed-recents") && !target.closest(".ed-nav-recents-btn")) {
+        this.hideRecents();
+      }
       if (target.closest("[data-action='play-audio']")) {
         this.handlePlayAudio(target.closest("[data-action='play-audio']"));
       } else if (target.closest(".ed-clickable-word")) {
@@ -3249,6 +3261,42 @@ var DictionaryView = class extends import_obsidian3.ItemView {
     if (!this.navButtons) return;
     this.navButtons.back.disabled = this.navIndex <= 0;
     this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
+    this.recentsBtn.disabled = this.navHistory.length === 0;
+  }
+  /**
+   * Toggle the recents dropdown.
+   */
+  toggleRecents() {
+    if (this.recentsDropdown.classList.contains("ed-hidden")) {
+      this.showRecents();
+    } else {
+      this.hideRecents();
+    }
+  }
+  showRecents() {
+    this.recentsDropdown.empty();
+    const recent = this.navHistory.slice(-20).reverse();
+    if (recent.length === 0) {
+      this.recentsDropdown.createDiv({ cls: "ed-recents-empty", text: "No recent words" });
+    } else {
+      for (const word of recent) {
+        const item = this.recentsDropdown.createDiv({ cls: "ed-recents-item" });
+        item.createSpan({ cls: "ed-recents-word", text: word });
+        if (word === this.currentWord) {
+          item.classList.add("ed-recents-current");
+        }
+        item.addEventListener("click", () => {
+          this.searchInput.value = word;
+          this.hideRecents();
+          this.hideTypeahead();
+          this.doLookup(word, true);
+        });
+      }
+    }
+    this.recentsDropdown.classList.remove("ed-hidden");
+  }
+  hideRecents() {
+    this.recentsDropdown.classList.add("ed-hidden");
   }
   // ============================================================
   // Typeahead / autocomplete
