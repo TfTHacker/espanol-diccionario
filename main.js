@@ -2668,22 +2668,20 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Espa\xF1ol Diccionario Settings" });
-    containerEl.createEl("h3", { text: "LLM Chat" });
-    new import_obsidian3.Setting(containerEl).setName("LLM Server URL").setDesc("OpenAI-compatible API endpoint. Default: Ollama Cloud. For local Ollama use http://localhost:11434. For OpenAI use https://api.openai.com/v1.").addText(
+    new import_obsidian3.Setting(containerEl).setName("Server URL").setDesc("OpenAI-compatible API endpoint. Use http://localhost:11434 for local Ollama, or https://api.openai.com/v1 for OpenAI.").addText(
       (text) => text.setPlaceholder("https://ollama.com").setValue(this.plugin.settings.llmServerUrl).onChange(async (value) => {
         this.plugin.settings.llmServerUrl = value.trim();
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("API Key").setDesc("Required for cloud providers. Leave empty for local Ollama (no auth). Stored securely in your vault (never published).").addText((text) => {
+    new import_obsidian3.Setting(containerEl).setName("API Key").setDesc("Required for cloud providers. Leave empty for local Ollama.").addText((text) => {
       text.setPlaceholder("sk-...").setValue(this.plugin.settings.llmApiKey).onChange(async (value) => {
         this.plugin.settings.llmApiKey = value;
         await this.plugin.saveSettings();
       });
       text.inputEl.type = "password";
     });
-    new import_obsidian3.Setting(containerEl).setName("Model").setDesc("Click the button to browse available models from your LLM server, or type a model name manually.").addText(
+    new import_obsidian3.Setting(containerEl).setName("Model").setDesc("Type a model name or browse available models from your server.").addText(
       (text) => text.setPlaceholder("gemma3:4b").setValue(this.plugin.settings.llmModel).onChange(async (value) => {
         this.plugin.settings.llmModel = value.trim();
         await this.plugin.saveSettings();
@@ -2709,22 +2707,25 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         );
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("Temperature").setDesc("Controls randomness. Lower = more deterministic, higher = more creative. (0\u20131)").addSlider(
+    containerEl.createEl("h3", { text: "Chat behavior" });
+    new import_obsidian3.Setting(containerEl).setName("System prompt").setDesc("Instructions that shape how the AI responds. Tailored for Spanish tutoring by default.").addTextArea((text) => {
+      text.setPlaceholder("You are a helpful Spanish language tutor...").setValue(this.plugin.settings.systemPrompt).onChange(async (value) => {
+        this.plugin.settings.systemPrompt = value;
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 4;
+      text.inputEl.style.width = "100%";
+    });
+    new import_obsidian3.Setting(containerEl).setName("Temperature").setDesc("Lower = more deterministic, higher = more creative. (0\u20131)").addSlider(
       (slider) => slider.setLimits(0, 1, 0.1).setValue(this.plugin.settings.llmTemperature).setDynamicTooltip().onChange(async (value) => {
         this.plugin.settings.llmTemperature = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("System Prompt").setDesc("Custom system prompt for the LLM chat. Tailored for Spanish tutoring.").addTextArea(
-      (text) => text.setPlaceholder("You are a helpful Spanish language tutor...").setValue(this.plugin.settings.systemPrompt).onChange(async (value) => {
-        this.plugin.settings.systemPrompt = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    containerEl.createEl("h4", { text: "Chat suggestion prompts" });
+    containerEl.createEl("h4", { text: "Suggestion prompts" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Customize the 4 suggestion prompts that appear in the chat. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions."
+      text: "Clickable prompts shown below each dictionary entry. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions."
     });
     for (let i = 0; i < 4; i++) {
       new import_obsidian3.Setting(containerEl).setName(`Prompt ${i + 1}`).addText(
@@ -2737,9 +2738,9 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
     containerEl.createEl("h4", { text: "Not-found prompt" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: 'When a word is not found in the dictionary, an "Ask AI about this word" link appears. This prompt is sent to the LLM when that link is clicked.'
+      text: 'When a word is not found in the dictionary, an "Ask AI about this word" link appears. This prompt is sent to the AI when that link is clicked.'
     });
-    new import_obsidian3.Setting(containerEl).setName("Not-found prompt").setDesc("Use {word} for the searched word, {source} for the detected source language (Spanish/English), and {target} for the target language.").addTextArea((text) => {
+    new import_obsidian3.Setting(containerEl).setName("Prompt").setDesc("Use {word} for the searched word, {source} for the detected source language, and {target} for the target language.").addTextArea((text) => {
       text.setPlaceholder(DEFAULT_SETTINGS.notFoundPrompt).setValue(this.plugin.settings.notFoundPrompt).onChange(async (value) => {
         this.plugin.settings.notFoundPrompt = value;
         await this.plugin.saveSettings();
@@ -2747,7 +2748,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
       text.inputEl.rows = 3;
       text.inputEl.style.width = "100%";
     });
-    new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, system prompt, suggestion prompts, and not-found prompt to their defaults.").addButton(
+    new import_obsidian3.Setting(containerEl).setName("Reset chat settings").setDesc("Restore all chat settings to their defaults.").addButton(
       (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
         this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
         this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
@@ -2760,15 +2761,14 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         this.display();
       })
     );
-    containerEl.createEl("h3", { text: "Audio" });
+    containerEl.createEl("h3", { text: "Display" });
     new import_obsidian3.Setting(containerEl).setName("Auto-play pronunciation").setDesc("Automatically play audio pronunciation when looking up a Spanish word.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.autoPlayAudio).onChange(async (value) => {
         this.plugin.settings.autoPlayAudio = value;
         await this.plugin.saveSettings();
       })
     );
-    containerEl.createEl("h3", { text: "Display" });
-    new import_obsidian3.Setting(containerEl).setName("Max example sentences").setDesc("Maximum number of example sentences to display per word (1\u201320).").addSlider(
+    new import_obsidian3.Setting(containerEl).setName("Max example sentences").setDesc("Maximum number of example sentences shown per word (1\u201320).").addSlider(
       (slider) => slider.setLimits(1, 20, 1).setValue(this.plugin.settings.maxSentences).setDynamicTooltip().onChange(async (value) => {
         this.plugin.settings.maxSentences = value;
         await this.plugin.saveSettings();
@@ -2789,7 +2789,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
     } else {
       new import_obsidian3.Setting(containerEl).setName("Dictionary statistics").setDesc("Database not loaded yet. Open the dictionary view first.");
     }
-    new import_obsidian3.Setting(containerEl).setName("Re-download dictionary database").setDesc("Delete the local dictionary database and re-download the latest version from GitHub.").addButton((button) => {
+    new import_obsidian3.Setting(containerEl).setName("Re-download database").setDesc("Delete the local dictionary database and re-download the latest version from GitHub.").addButton((button) => {
       button.setButtonText("Re-download database").setClass("mod-warning").onClick(async () => {
         button.setButtonText("Downloading...");
         button.setDisabled(true);
