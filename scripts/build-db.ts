@@ -22,7 +22,7 @@ const DB_PATH = join(DATA_DIR, "dictionary.db");
 
 // Download URLs
 const KAIKKI_URL = "https://kaikki.org/dictionary/Spanish/kaikki.org-dictionary-Spanish.jsonl";
-const FREQUENCY_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_50k.txt";
+const FREQUENCY_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_full.txt";
 const SPANISH_DATA_BASE = "https://raw.githubusercontent.com/doozan/spanish_data/master";
 
 mkdirSync(DATA_DIR, { recursive: true });
@@ -257,10 +257,10 @@ async function buildFullDatabase() {
 	`);
 
 	// ============================================================
-	// Step 1: Load frequency data (Spanish 50k)
+	// Step 1: Load frequency data (full Spanish word frequencies)
 	// ============================================================
 	console.log("\n[build-db] Step 1: Loading word frequency data...");
-	const freqPath = join(DATA_DIR, "es_50k.txt");
+	const freqPath = join(DATA_DIR, "es_full.txt");
 	downloadFile(FREQUENCY_URL, freqPath);
 
 	const frequencyMap = new Map<string, number>(); // word -> rank (lower = more frequent)
@@ -451,52 +451,59 @@ async function buildFullDatabase() {
 	console.log(`[build-db] Inserted ${wordCount} Spanish words`);
 
 	// ============================================================
-	// Step 3: Build English→Spanish reverse lookup (top 5000 words)
+	// ============================================================
+	// Step 3: Build English→Spanish reverse lookup from ALL Spanish defs
 	// ============================================================
 	console.log("\n[build-db] Step 3: Building English→Spanish reverse lookup...");
 
-	// For the most common Spanish words, add English entries that map back
-	// e.g., "house" → "casa", "speak" → "hablar"
-	const englishToSpanish = new Map<string, { spanishWord: string; pos: string }[]>(); // english word -> [spanish words]
+	const englishToSpanish = new Map<string, { spanishWord: string; pos: string; senseNum: number }[]>();
 
-	// Read back the top 5000 definitions to build reverse mapping
-	const topWords = db.prepare(`
-		SELECT w.id, w.word, w.pos, d.definition
-		FROM words w
-		JOIN definitions d ON d.word_id = w.id
-		WHERE w.lang = 'es' AND w.frequency IS NOT NULL AND w.frequency <= 5000
-		ORDER BY w.frequency ASC
-	`).all() as { id: number; word: string; pos: string; definition: string }[];
+	for (const w of words) {
+		const defLimit = Math.min(w.definitions.length, 5);
+		for (let di = 0; di < defLimit; di++) {
+			const gloss = w.definitions[di].definition;
+			const parts = gloss.split(/[,;()]| or |\band\b/);
+			for (const part of parts) {
+				let enWord = part.trim().toLowerCase();
+				enWord = enWord.replace(/^to /, "").replace(/\([^)]*\)/g, "").trim();
+				if (!enWord || enWord.length < 2 || enWord.length > 25) continue;
+				if (!/^[a-z][a-z'\-]*$/.test(enWord)) continue;
 
-	let enWordId = wordId + 10000; // Start English IDs at a high offset
-	let enDefId = defId + 10000;
-
-	for (const row of topWords) {
-		// Simple approach: use the first definition as the English equivalent
-		const enWord = row.definition.toLowerCase().replace(/^to /, "").split(",")[0].split(";")[0].trim();
-		if (!enWord || enWord.length < 2 || enWord.includes(" ")) continue;
-
-		if (!englishToSpanish.has(enWord)) {
-			englishToSpanish.set(enWord, []);
+				if (!englishToSpanish.has(enWord)) {
+					englishToSpanish.set(enWord, []);
+				}
+				const arr = englishToSpanish.get(enWord)!;
+				if (!arr.some(e => e.spanishWord === w.word)) {
+					arr.push({ spanishWord: w.word, pos: w.pos, senseNum: di + 1 });
+				}
+			}
 		}
-		englishToSpanish.get(enWord)!.push({ spanishWord: row.word, pos: row.pos });
 	}
+	console.log(`[build-db] Extracted ${englishToSpanish.size} English headwords from Spanish definitions`);
+
+	let enWordId = wordId + 100000;
+	let enDefId = defId + 100000;
+	let enWordCount = 0;
 
 	const englishInsertTx = db.transaction(() => {
 		for (const [enWord, spanishRefs] of englishToSpanish) {
-			enWordId++;
 			const freq = frequencyMap.get(enWord) || null;
+			if (freq === null && spanishRefs.length < 2 && enWord.length > 5) continue;
+			enWordId++;
 			insertWord.run(enWordId, enWord, "en", spanishRefs[0].pos, freq, null);
-			for (let i = 0; i < Math.min(spanishRefs.length, 5); i++) {
+			enWordCount++;
+			const maxRefs = Math.min(spanishRefs.length, 8);
+			for (let i = 0; i < maxRefs; i++) {
 				enDefId++;
-				insertDef.run(enDefId, enWordId, i + 1, spanishRefs[i].spanishWord, '["es"]', null);
+				const ref = spanishRefs[i];
+				const defText = ref.pos ? `${ref.spanishWord} (${ref.pos})` : ref.spanishWord;
+				insertDef.run(enDefId, enWordId, i + 1, defText, '["es"]', null);
 			}
 		}
 	});
 	englishInsertTx();
-	console.log(`[build-db] Added ${englishToSpanish.size} English→Spanish reverse entries`);
+	console.log(`[build-db] Added ${enWordCount} English→Spanish reverse entries`);
 
-	// ============================================================
 	// Step 4: Load lemmatization data (es_allforms.csv from doozan)
 	// ============================================================
 	console.log("\n[build-db] Step 4: Loading lemmatization data...");
@@ -625,8 +632,28 @@ async function buildFullDatabase() {
 	console.log(`[build-db] Inserted ${linkedSentenceCount} linked example sentences`);
 
 	// ============================================================
-	// Finalize: VACUUM and stats
+	// Step 6: Prune obscure words (remove words without frequency data)
 	// ============================================================
+	console.log("\n[build-db] Step 6: Pruning obscure words...");
+
+	const wordsBefore = db.prepare("SELECT COUNT(*) as c FROM words").get() as { c: number };
+	const esBefore = db.prepare("SELECT COUNT(*) as c FROM words WHERE lang = 'es'").get() as { c: number };
+	const defsBefore = db.prepare("SELECT COUNT(*) as c FROM definitions").get() as { c: number };
+
+	// Remove words that have no frequency data — these are extremely obscure
+	const delDefs = db.prepare("DELETE FROM definitions WHERE word_id IN (SELECT id FROM words WHERE frequency IS NULL)").run();
+	const delSent = db.prepare("DELETE FROM sentences WHERE word_id IN (SELECT id FROM words WHERE frequency IS NULL)").run();
+	const delWords = db.prepare("DELETE FROM words WHERE frequency IS NULL").run();
+
+	// Remove lemma entries linking to unknown infinitives
+	const delLemmas = db.prepare("DELETE FROM lemmas WHERE lemma NOT IN (SELECT word FROM words WHERE lang = 'es')").run();
+
+	const wordsAfter = db.prepare("SELECT COUNT(*) as c FROM words").get() as { c: number };
+	const esAfter = db.prepare("SELECT COUNT(*) as c FROM words WHERE lang = 'es'").get() as { c: number };
+	const defsAfter = db.prepare("SELECT COUNT(*) as c FROM definitions").get() as { c: number };
+
+	console.log(`[build-db] Pruned: ${wordsBefore.c} → ${wordsAfter.c} words (ES: ${esBefore.c} → ${esAfter.c}), ${defsBefore.c} → ${defsAfter.c} definitions`);
+	console.log(`[build-db] Removed ${delWords.changes} obscure words, ${delDefs.changes} definitions, ${delLemmas.changes} lemmas`);
 	console.log("\n[build-db] Optimizing database...");
 	db.pragma("optimize");
 	db.close();
