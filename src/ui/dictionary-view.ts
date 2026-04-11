@@ -43,6 +43,7 @@ export class DictionaryView extends ItemView {
 	private chatRecentsDropdown!: HTMLElement;
 	private chatInputBeforeHistory = ""; // stores current input when navigating history
 	private chatToggleBtn!: HTMLButtonElement;
+	private chatSuggestionsContainer!: HTMLElement;
 	private isStreaming = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
@@ -204,6 +205,9 @@ export class DictionaryView extends ItemView {
 
 		const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
 
+		// Suggestion chips (between messages and input)
+		this.chatSuggestionsContainer = this.chatContainer.createDiv({ cls: "ed-chat-suggestions" });
+
 		const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
 		this.chatInput = chatForm.createEl("input", {
 			type: "text",
@@ -360,6 +364,9 @@ export class DictionaryView extends ItemView {
 				this.currentWord = word;
 				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
 
+				// Update chat suggestion chips for this word
+				this.renderChatSuggestions();
+
 				if (pushHistory) {
 					this.pushNavHistory(word);
 				}
@@ -445,6 +452,7 @@ export class DictionaryView extends ItemView {
 		}
 		if (!isHidden) {
 			this.updateChatModelLabel();
+			this.renderChatSuggestions();
 			this.chatInput.focus();
 		}
 	}
@@ -454,6 +462,74 @@ export class DictionaryView extends ItemView {
 		const model = this.plugin.settings.llmModel || "(no model)";
 		const server = this.plugin.settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
 		this.chatModelLabel.textContent = `Model: ${model} · ${server}`;
+	}
+
+	private buildWordContext(): string {
+		const result = this.currentResult;
+		if (!result) return "";
+
+		const { word, definitions, sentences } = result;
+		const lines: string[] = [];
+		lines.push(`The user is currently looking up: "${word.word}" (${word.lang === "es" ? "Spanish" : "English"}${word.pos ? ", " + word.pos : ""}).`);
+
+		if (definitions.length > 0) {
+			lines.push("Definitions:");
+			for (const d of definitions) {
+				lines.push(`  ${d.senseNum ?? "•"}. ${d.definition}${d.context ? " (" + d.context + ")" : ""}`);
+			}
+		}
+
+		if (sentences.length > 0) {
+			lines.push("Example sentences:");
+			for (const s of sentences.slice(0, 3)) {
+				lines.push(`  \u2022 ${s.sentenceEs || ""}${s.sentenceEn ? " = " + s.sentenceEn : ""}`);
+			}
+		}
+
+		if (result.resolvedFrom) {
+			lines.push(`(Resolved from inflected form: "${result.resolvedFrom}")`);
+		}
+
+		return lines.join("\n");
+	}
+
+	private renderChatSuggestions() {
+		const container = this.chatSuggestionsContainer;
+		if (!container) return;
+		container.empty();
+
+		const result = this.currentResult;
+		if (!result) return;
+
+		const { word } = result;
+		const wordStr = word.word;
+		const pos = word.pos || "";
+		const defs = result.definitions.map(d => d.definition).join("; ");
+
+		const templates = this.plugin.settings.chatSuggestions;
+		for (const template of templates) {
+			if (!template.trim()) continue;
+			const text = template
+				.replace(/{word}/g, wordStr)
+				.replace(/{pos}/g, pos)
+				.replace(/{defs}/g, defs);
+			const chip = container.createEl("button", {
+				cls: "ed-chat-suggestion-chip",
+				attr: { type: "button" },
+			});
+			chip.textContent = text;
+			chip.addEventListener("click", () => this.sendChatSuggestion(text));
+		}
+	}
+
+	private sendChatSuggestion(text: string) {
+		// Open chat if hidden
+		if (this.chatContainer.classList.contains("ed-hidden")) {
+			this.toggleChat();
+		}
+		// Set input and send
+		this.chatInput.value = text;
+		this.sendChat();
 	}
 
 	private clearChat() {
@@ -573,7 +649,7 @@ export class DictionaryView extends ItemView {
 		// Stream response
 		assistantDiv.textContent = "";
 		let accumulated = "";
-		const wordContext = this.currentResult?.word?.word;
+		const wordContext = this.buildWordContext();
 		let renderTimeout: ReturnType<typeof setTimeout> | null = null;
 
 		const renderMarkdown = () => {

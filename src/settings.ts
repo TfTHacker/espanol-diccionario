@@ -15,6 +15,7 @@ export interface PluginSettings {
 	autoPlayAudio: boolean;
 	navHistory: string[];
 	chatPromptHistory: string[];
+	chatSuggestions: [string, string, string, string];
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -31,6 +32,12 @@ language the user writes in (English or Spanish).`,
 	autoPlayAudio: false,
 	navHistory: [],
 	chatPromptHistory: [],
+	chatSuggestions: [
+		"Tell me more about \"{word}\"",
+		"Give me example sentences using \"{word}\"",
+		"What words are easily confused with \"{word}\"?",
+		"Explain the different meanings of \"{word}\"",
+	],
 };
 
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {
@@ -142,10 +149,31 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Chat suggestion prompts
+		containerEl.createEl("h4", { text: "Chat suggestion prompts" });
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: "Customize the 4 suggestion prompts that appear in the chat. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions.",
+		});
+
+		for (let i = 0; i < 4; i++) {
+			new Setting(containerEl)
+				.setName(`Prompt ${i + 1}`)
+				.addText((text) =>
+					text
+						.setPlaceholder(DEFAULT_SETTINGS.chatSuggestions[i])
+						.setValue(this.plugin.settings.chatSuggestions[i] || "")
+						.onChange(async (value) => {
+							this.plugin.settings.chatSuggestions[i] = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		}
+
 		// Reset LLM settings to defaults
 		new Setting(containerEl)
 			.setName("Reset LLM settings")
-			.setDesc("Restore server URL, API key, model, temperature, and system prompt to their defaults.")
+			.setDesc("Restore server URL, API key, model, temperature, system prompt, and suggestion prompts to their defaults.")
 			.addButton((button) =>
 				button
 					.setButtonText("Reset to defaults")
@@ -156,6 +184,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
 						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
 						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
 						await this.plugin.saveSettings();
 						this.display();
 					})

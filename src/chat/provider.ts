@@ -66,7 +66,7 @@ export async function sendChatMessage(
 		{
 			role: "system",
 			content: wordContext
-				? `${systemPrompt}\n\nThe user just looked up the word: "${wordContext}". Use this as context for your response.`
+				? `${systemPrompt}\n\n${wordContext}`
 				: systemPrompt,
 		},
 		...messages,
@@ -184,7 +184,7 @@ async function streamWithFetch(
 		{
 			role: "system",
 			content: wordContext
-				? `${systemPrompt}\n\nThe user just looked up the word: "${wordContext}". Use this as context for your response.`
+				? `${systemPrompt}\n\n${wordContext}`
 				: systemPrompt,
 		},
 		...messages,

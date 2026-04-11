@@ -2583,7 +2583,13 @@ language the user writes in (English or Spanish).`,
   maxSentences: 5,
   autoPlayAudio: false,
   navHistory: [],
-  chatPromptHistory: []
+  chatPromptHistory: [],
+  chatSuggestions: [
+    'Tell me more about "{word}"',
+    'Give me example sentences using "{word}"',
+    'What words are easily confused with "{word}"?',
+    'Explain the different meanings of "{word}"'
+  ]
 };
 var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
@@ -2646,13 +2652,27 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, and system prompt to their defaults.").addButton(
+    containerEl.createEl("h4", { text: "Chat suggestion prompts" });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Customize the 4 suggestion prompts that appear in the chat. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions."
+    });
+    for (let i = 0; i < 4; i++) {
+      new import_obsidian3.Setting(containerEl).setName(`Prompt ${i + 1}`).addText(
+        (text) => text.setPlaceholder(DEFAULT_SETTINGS.chatSuggestions[i]).setValue(this.plugin.settings.chatSuggestions[i] || "").onChange(async (value) => {
+          this.plugin.settings.chatSuggestions[i] = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    }
+    new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, system prompt, and suggestion prompts to their defaults.").addButton(
       (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
         this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
         this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
         this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
         this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
         this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+        this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
         await this.plugin.saveSettings();
         this.display();
       })
@@ -2818,7 +2838,7 @@ async function sendChatMessage(messages, settings, wordContext) {
       role: "system",
       content: wordContext ? `${systemPrompt}
 
-The user just looked up the word: "${wordContext}". Use this as context for your response.` : systemPrompt
+${wordContext}` : systemPrompt
     },
     ...messages
   ];
@@ -2899,7 +2919,7 @@ async function streamWithFetch(messages, settings, onChunk, wordContext) {
       role: "system",
       content: wordContext ? `${systemPrompt}
 
-The user just looked up the word: "${wordContext}". Use this as context for your response.` : systemPrompt
+${wordContext}` : systemPrompt
     },
     ...messages
   ];
@@ -3319,6 +3339,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     clearBtn.setText("\u{1F5D1} Clear");
     clearBtn.addEventListener("click", () => this.clearChat());
     const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
+    this.chatSuggestionsContainer = this.chatContainer.createDiv({ cls: "ed-chat-suggestions" });
     const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
     this.chatInput = chatForm.createEl("input", {
       type: "text",
@@ -3446,6 +3467,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
         this.currentResult = result;
         this.currentWord = word;
         resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
+        this.renderChatSuggestions();
         if (pushHistory) {
           this.pushNavHistory(word);
         }
@@ -3517,6 +3539,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     }
     if (!isHidden) {
       this.updateChatModelLabel();
+      this.renderChatSuggestions();
       this.chatInput.focus();
     }
   }
@@ -3525,6 +3548,58 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     const model = this.plugin.settings.llmModel || "(no model)";
     const server = this.plugin.settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
     this.chatModelLabel.textContent = `Model: ${model} \xB7 ${server}`;
+  }
+  buildWordContext() {
+    const result = this.currentResult;
+    if (!result) return "";
+    const { word, definitions, sentences } = result;
+    const lines = [];
+    lines.push(`The user is currently looking up: "${word.word}" (${word.lang === "es" ? "Spanish" : "English"}${word.pos ? ", " + word.pos : ""}).`);
+    if (definitions.length > 0) {
+      lines.push("Definitions:");
+      for (const d of definitions) {
+        lines.push(`  ${d.senseNum ?? "\u2022"}. ${d.definition}${d.context ? " (" + d.context + ")" : ""}`);
+      }
+    }
+    if (sentences.length > 0) {
+      lines.push("Example sentences:");
+      for (const s of sentences.slice(0, 3)) {
+        lines.push(`  \u2022 ${s.sentenceEs || ""}${s.sentenceEn ? " = " + s.sentenceEn : ""}`);
+      }
+    }
+    if (result.resolvedFrom) {
+      lines.push(`(Resolved from inflected form: "${result.resolvedFrom}")`);
+    }
+    return lines.join("\n");
+  }
+  renderChatSuggestions() {
+    const container = this.chatSuggestionsContainer;
+    if (!container) return;
+    container.empty();
+    const result = this.currentResult;
+    if (!result) return;
+    const { word } = result;
+    const wordStr = word.word;
+    const pos = word.pos || "";
+    const defs = result.definitions.map((d) => d.definition).join("; ");
+    const templates = this.plugin.settings.chatSuggestions;
+    for (const template of templates) {
+      if (!template.trim()) continue;
+      const text = template.replace(/{word}/g, wordStr).replace(/{pos}/g, pos).replace(/{defs}/g, defs);
+      const chip = container.createEl("button", {
+        cls: "ed-chat-suggestion-chip",
+        attr: { type: "button" }
+      });
+      chip.textContent = text;
+      chip.addEventListener("click", () => this.sendChatSuggestion(text));
+    }
+  }
+  sendChatSuggestion(text) {
+    if (this.chatContainer.classList.contains("ed-hidden")) {
+      this.toggleChat();
+    }
+    this.chatInput.value = text;
+    this.sendChat();
   }
   clearChat() {
     this.chatMessages = [];
@@ -3611,7 +3686,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     }
     assistantDiv.textContent = "";
     let accumulated = "";
-    const wordContext = this.currentResult?.word?.word;
+    const wordContext = this.buildWordContext();
     let renderTimeout = null;
     const renderMarkdown = () => {
       const md = accumulated;

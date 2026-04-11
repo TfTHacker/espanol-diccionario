@@ -977,3 +977,33 @@
 	background: var(--background-modifier-hover);
 	color: var(--text-error);
 }
+
+/* === Chat suggestion chips === */
+.ed-chat-suggestions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 4px 0;
+	flex-shrink: 0;
+}
+
+.ed-chat-suggestion-chip {
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	padding: 3px 10px;
+	border-radius: 12px;
+	font-size: 11px;
+	cursor: pointer;
+	transition: all 0.15s;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 280px;
+}
+
+.ed-chat-suggestion-chip:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+}
