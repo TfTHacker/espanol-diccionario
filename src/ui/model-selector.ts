@@ -2,6 +2,7 @@
 
 import { App, Modal, Notice, requestUrl } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
+import type { PluginSettings } from "../settings";
 
 interface ModelInfo {
 	id: string;
@@ -77,8 +78,8 @@ function renderModelList(
 			return;
 		}
 
-		// Show max 50 models for performance
-		const shown = filtered.slice(0, 50);
+		// Show max ${MAX_CHAT_MODELS_SHOWN} models for performance
+		const shown = filtered.slice(0, MAX_CHAT_MODELS_SHOWN);
 
 		for (const model of shown) {
 			const item = listEl.createDiv({ cls: "ed-model-item" });
@@ -92,8 +93,8 @@ function renderModelList(
 			});
 		}
 
-		if (filtered.length > 50) {
-			listEl.createDiv({ cls: "ed-model-more", text: `...and ${filtered.length - 50} more. Type to narrow results.` });
+		if (filtered.length > MAX_CHAT_MODELS_SHOWN) {
+			listEl.createDiv({ cls: "ed-model-more", text: `...and ${filtered.length - MAX_CHAT_MODELS_SHOWN} more. Type to narrow results.` });
 		}
 	}
 
@@ -110,13 +111,16 @@ function renderModelList(
 /**
  * Fetch available models from the LLM server.
  */
+import type { DictionaryView } from "./dictionary-view";
+import { OLLAMA_LOCAL_HOSTS, MAX_CHAT_MODELS_SHOWN } from "../constants";
+
 async function fetchModels(serverUrl: string, apiKey: string): Promise<ModelInfo[]> {
 	// Build the models URL
 	let url = serverUrl.replace(/\/+$/, "");
 	// Strip API subpaths to get base URL
 	url = url.replace(/\/v1\/chat\/completions$/, "").replace(/\/api\/chat$/, "").replace(/\/chat\/completions$/, "");
 
-	const isLocalOllama = url.includes("localhost:11434") || url.includes("127.0.0.1:11434");
+	const isLocalOllama = OLLAMA_LOCAL_HOSTS.some(h => url.includes(h));
 	const modelsUrl = isLocalOllama
 		? `${url}/api/tags`
 		: url.includes("/v1")
@@ -159,9 +163,9 @@ async function fetchModels(serverUrl: string, apiKey: string): Promise<ModelInfo
  * Modal dialog for picking a model (used from command palette).
  */
 export class ModelPickerDialog extends Modal {
-	private plugin: any; // EspañolDiccionarioPlugin
+	private plugin: EspañolDiccionarioPlugin;
 
-	constructor(app: App, plugin: any) {
+	constructor(app: App, plugin: EspañolDiccionarioPlugin) {
 		super(app);
 		this.plugin = plugin;
 	}
@@ -187,8 +191,8 @@ export class ModelPickerDialog extends Modal {
 				// Notify any open dictionary views to update model label
 				const leaves = this.app.workspace.getLeavesOfType("espanol-diccionario-view");
 				for (const leaf of leaves) {
-					if (leaf.view && typeof (leaf.view as any).updateChatModelLabel === "function") {
-						(leaf.view as any).updateChatModelLabel();
+					if (leaf.view && typeof (leaf.view as DictionaryView).updateChatModelLabel === "function") {
+						(leaf.view as DictionaryView).updateChatModelLabel();
 					}
 				}
 			}

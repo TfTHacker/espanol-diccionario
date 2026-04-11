@@ -3,6 +3,7 @@
  if you want to view the source, please visit the github repository of this plugin
 */
 
+"use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -10,9 +11,6 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -2167,20 +2165,47 @@ var require_sql_wasm_browser = __commonJS({
   }
 });
 
-// src/dictionary/db.ts
-var db_exports = {};
-__export(db_exports, {
-  closeDatabase: () => closeDatabase,
-  getDatabaseStats: () => getDatabaseStats,
-  getDefinitions: () => getDefinitions,
-  getSentences: () => getSentences,
-  initDatabase: () => initDatabase,
-  isDatabaseReady: () => isDatabaseReady,
-  lemmatize: () => lemmatize,
-  lookupWord: () => lookupWord,
-  redownloadDatabase: () => redownloadDatabase,
-  searchWords: () => searchWords
+// src/main.ts
+var main_exports = {};
+__export(main_exports, {
+  default: () => Espa\u00F1olDiccionarioPlugin
 });
+module.exports = __toCommonJS(main_exports);
+var import_obsidian8 = require("obsidian");
+
+// src/settings.ts
+var import_obsidian3 = require("obsidian");
+
+// src/dictionary/db.ts
+var import_obsidian = require("obsidian");
+var import_sql = __toESM(require_sql_wasm_browser());
+
+// src/constants.ts
+var PLUGIN_ID = "espanol-diccionario";
+var VIEW_TYPE_DICTIONARY = "espanol-diccionario-view";
+var VIEW_TYPE_WEB = "espanol-diccionario-web";
+var GITHUB_RELEASES_BASE = "https://github.com/TfTHacker/espanol-diccionario/releases/latest/download";
+var TYPEAHEAD_DEBOUNCE_MS = 150;
+var SEARCH_DEBOUNCE_MS = 300;
+var MARKDOWN_RENDER_DEBOUNCE_MS = 80;
+var AUDIO_LOAD_TIMEOUT_MS = 8e3;
+var MAX_TYPEAHEAD_RESULTS = 10;
+var MAX_RECENT_WORDS = 20;
+var MAX_CHAT_PROMPT_HISTORY = 100;
+var MAX_CHAT_MODELS_SHOWN = 50;
+var OLLAMA_LOCAL_HOSTS = ["localhost:11434", "127.0.0.1:11434"];
+
+// src/utils/normalize.ts
+function stripAccents(text) {
+  return text.replace(/á/g, "a").replace(/é/g, "e").replace(/í/g, "i").replace(/ó/g, "o").replace(/ú/g, "u").replace(/ü/g, "u").replace(/ñ/g, "n").replace(/Á/g, "A").replace(/É/g, "E").replace(/Í/g, "I").replace(/Ó/g, "O").replace(/Ú/g, "U").replace(/Ü/g, "U").replace(/Ñ/g, "N");
+}
+
+// src/dictionary/db.ts
+var db = null;
+var dbReady = false;
+var initPromise = null;
+var cachedStats = null;
+var GITHUB_RELEASES_URL = GITHUB_RELEASES_BASE;
 async function initDatabase(app, pluginDir) {
   if (dbReady) return;
   if (initPromise) return initPromise;
@@ -2194,7 +2219,7 @@ async function _initDatabase(app, pluginDir) {
     let dbExists = await app.vault.adapter.exists(dbPath);
     if (!dbExists) {
       console.log("[espa\xF1ol-diccionario] dictionary.db not found, downloading...");
-      await downloadFile(app, pluginDir, "dictionary.db", `${GITHUB_RELEASES_BASE}/dictionary.db`);
+      await downloadFile(app, pluginDir, "dictionary.db", `${GITHUB_RELEASES_URL}/dictionary.db`);
       dbExists = await app.vault.adapter.exists(dbPath);
       if (!dbExists) {
         throw new Error("Failed to download dictionary.db. Please check your internet connection or manually place the file in the plugin directory.");
@@ -2205,7 +2230,7 @@ async function _initDatabase(app, pluginDir) {
     let wasmExists = await app.vault.adapter.exists(wasmPath);
     if (!wasmExists) {
       console.log("[espa\xF1ol-diccionario] sql-wasm.wasm not found, downloading...");
-      await downloadFile(app, pluginDir, "sql-wasm.wasm", `${GITHUB_RELEASES_BASE}/sql-wasm.wasm`);
+      await downloadFile(app, pluginDir, "sql-wasm.wasm", `${GITHUB_RELEASES_URL}/sql-wasm.wasm`);
       wasmExists = await app.vault.adapter.exists(wasmPath);
       if (!wasmExists) {
         throw new Error("Failed to download sql-wasm.wasm. Please check your internet connection.");
@@ -2262,7 +2287,8 @@ async function loadWasmBinary(app, pluginDir) {
     console.warn("[espa\xF1ol-diccionario] Could not load WASM from vault:", err);
   }
   try {
-    const resourcePath = app.vault.adapter.getResourcePath?.(wasmPath);
+    const adapter = app.vault.adapter;
+    const resourcePath = adapter.getResourcePath?.(wasmPath);
     if (resourcePath) {
       console.log("[espa\xF1ol-diccionario] Loading WASM via resource path:", resourcePath);
       const response2 = await fetch(resourcePath);
@@ -2284,6 +2310,7 @@ function isDatabaseReady() {
   return dbReady;
 }
 function getDatabaseStats() {
+  if (cachedStats) return cachedStats;
   if (!dbReady || !db) return null;
   try {
     const esWords = db.exec("SELECT COUNT(*) FROM words WHERE lang = 'es'")[0]?.values[0]?.[0] ?? 0;
@@ -2295,7 +2322,7 @@ function getDatabaseStats() {
     const pageCount = db.exec("PRAGMA page_count")[0]?.values[0]?.[0] ?? 0;
     const dbSizeBytes = pageSize * pageCount;
     const dbSizeMB = dbSizeBytes > 0 ? (dbSizeBytes / 1024 / 1024).toFixed(1) : "unknown";
-    return {
+    cachedStats = {
       esWords: Number(esWords),
       enWords: Number(enWords),
       definitions: Number(definitions),
@@ -2304,6 +2331,7 @@ function getDatabaseStats() {
       totalWords: Number(esWords) + Number(enWords),
       dbSizeMB
     };
+    return cachedStats;
   } catch {
     return null;
   }
@@ -2315,6 +2343,7 @@ function closeDatabase() {
   }
   dbReady = false;
   initPromise = null;
+  cachedStats = null;
 }
 async function redownloadDatabase(app, pluginDir) {
   console.log("[espa\xF1ol-diccionario] Re-downloading database...");
@@ -2335,6 +2364,20 @@ async function redownloadDatabase(app, pluginDir) {
   await initDatabase(app, pluginDir);
   console.log("[espa\xF1ol-diccionario] Database re-downloaded successfully");
 }
+var COLUMN_MAP = {
+  word_id: "wordId",
+  sense_num: "senseNum",
+  sentence_es: "sentenceEs",
+  sentence_en: "sentenceEn"
+};
+function toCamelCase(row) {
+  const result = {};
+  for (const [key, value] of Object.entries(row)) {
+    const mapped = COLUMN_MAP[key] ?? key;
+    result[mapped] = value;
+  }
+  return result;
+}
 function queryAll(sql, params = []) {
   if (!db) return [];
   const stmt = db.prepare(sql);
@@ -2343,7 +2386,7 @@ function queryAll(sql, params = []) {
   }
   const results = [];
   while (stmt.step()) {
-    const row = stmt.getAsObject();
+    const row = toCamelCase(stmt.getAsObject());
     results.push(row);
   }
   stmt.free();
@@ -2417,29 +2460,55 @@ function lemmatize(word, lang = "es") {
     [normalized, lang]
   );
 }
-var import_obsidian, import_sql, db, dbReady, initPromise, GITHUB_RELEASES_BASE;
-var init_db = __esm({
-  "src/dictionary/db.ts"() {
-    import_obsidian = require("obsidian");
-    import_sql = __toESM(require_sql_wasm_browser());
-    db = null;
-    dbReady = false;
-    initPromise = null;
-    GITHUB_RELEASES_BASE = "https://github.com/TfTHacker/espanol-diccionario/releases/latest/download";
+function sqlStripAccents(column) {
+  return `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${column}, '\xE1', 'a'), '\xE9', 'e'), '\xED', 'i'), '\xF3', 'o'), '\xFA', 'u'), '\xFC', 'u'), '\xF1', 'n'), '\xC1', 'A'), '\xC9', 'E'), '\xCD', 'I'), '\xD3', 'O'), '\xDA', 'U'), '\xDC', 'U')`;
+}
+function lookupWordNormalized(word, langHint) {
+  if (!dbReady || !db) return null;
+  const normalized = stripAccents(word.toLowerCase().trim());
+  if (!normalized) return null;
+  const strippedWord = sqlStripAccents("word");
+  if (langHint) {
+    const result = queryFirst(
+      `SELECT * FROM words WHERE ${strippedWord} = ? AND lang = ? ORDER BY frequency ASC LIMIT 1`,
+      [normalized, langHint]
+    );
+    if (result) return result;
   }
-});
-
-// src/main.ts
-var main_exports = {};
-__export(main_exports, {
-  default: () => Espa\u00F1olDiccionarioPlugin
-});
-module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
-
-// src/settings.ts
-var import_obsidian3 = require("obsidian");
-init_db();
+  for (const tryLang of ["es", "en"]) {
+    const result = queryFirst(
+      `SELECT * FROM words WHERE ${strippedWord} = ? AND lang = ? ORDER BY frequency ASC LIMIT 1`,
+      [normalized, tryLang]
+    );
+    if (result) return result;
+  }
+  return null;
+}
+function searchWordsNormalized(prefix, lang, limit = 20) {
+  if (!dbReady || !db) return [];
+  const normalized = stripAccents(prefix.toLowerCase().trim());
+  if (!normalized) return [];
+  const strippedWord = sqlStripAccents("word");
+  if (lang) {
+    return queryAll(
+      `SELECT * FROM words WHERE ${strippedWord} LIKE ? AND lang = ? ORDER BY frequency ASC LIMIT ?`,
+      [normalized + "%", lang, limit]
+    );
+  }
+  return queryAll(
+    `SELECT * FROM words WHERE ${strippedWord} LIKE ? ORDER BY CASE WHEN lang = 'es' THEN 0 ELSE 1 END, frequency ASC LIMIT ?`,
+    [normalized + "%", limit]
+  );
+}
+function lemmatizeNormalized(word, lang = "es") {
+  if (!dbReady || !db) return [];
+  const normalized = stripAccents(word.toLowerCase().trim());
+  const strippedInflected = sqlStripAccents("inflected");
+  return queryAll(
+    `SELECT * FROM lemmas WHERE ${strippedInflected} = ? AND lang = ?`,
+    [normalized, lang]
+  );
+}
 
 // src/ui/model-selector.ts
 var import_obsidian2 = require("obsidian");
@@ -2484,7 +2553,7 @@ function renderModelList(container, models, onChoose) {
       listEl.createDiv({ cls: "ed-model-empty", text: "No models match your filter." });
       return;
     }
-    const shown = filtered.slice(0, 50);
+    const shown = filtered.slice(0, MAX_CHAT_MODELS_SHOWN);
     for (const model of shown) {
       const item = listEl.createDiv({ cls: "ed-model-item" });
       item.createDiv({ cls: "ed-model-name", text: model.id });
@@ -2496,8 +2565,8 @@ function renderModelList(container, models, onChoose) {
         onChoose(model.id);
       });
     }
-    if (filtered.length > 50) {
-      listEl.createDiv({ cls: "ed-model-more", text: `...and ${filtered.length - 50} more. Type to narrow results.` });
+    if (filtered.length > MAX_CHAT_MODELS_SHOWN) {
+      listEl.createDiv({ cls: "ed-model-more", text: `...and ${filtered.length - MAX_CHAT_MODELS_SHOWN} more. Type to narrow results.` });
     }
   }
   renderFiltered();
@@ -2507,7 +2576,7 @@ function renderModelList(container, models, onChoose) {
 async function fetchModels(serverUrl, apiKey) {
   let url = serverUrl.replace(/\/+$/, "");
   url = url.replace(/\/v1\/chat\/completions$/, "").replace(/\/api\/chat$/, "").replace(/\/chat\/completions$/, "");
-  const isLocalOllama = url.includes("localhost:11434") || url.includes("127.0.0.1:11434");
+  const isLocalOllama = OLLAMA_LOCAL_HOSTS.some((h) => url.includes(h));
   const modelsUrl = isLocalOllama ? `${url}/api/tags` : url.includes("/v1") ? `${url}/models` : `${url}/v1/models`;
   const headers = {};
   if (apiKey) {
@@ -2535,7 +2604,6 @@ async function fetchModels(serverUrl, apiKey) {
   return models;
 }
 var ModelPickerDialog = class extends import_obsidian2.Modal {
-  // EspañolDiccionarioPlugin
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -2589,7 +2657,8 @@ language the user writes in (English or Spanish).`,
     'Give me example sentences using "{word}"',
     'What words are easily confused with "{word}"?',
     'Explain the different meanings of "{word}"'
-  ]
+  ],
+  notFoundPrompt: 'Translate "{word}" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context.'
 };
 var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
@@ -2665,7 +2734,15 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         })
       );
     }
-    new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, system prompt, and suggestion prompts to their defaults.").addButton(
+    new import_obsidian3.Setting(containerEl).setName("Prompt when word not found").setDesc("Use {word} for the searched word, {source} for the detected source language, and {target} for the target language.").addTextArea((text) => {
+      text.setPlaceholder(DEFAULT_SETTINGS.notFoundPrompt).setValue(this.plugin.settings.notFoundPrompt).onChange(async (value) => {
+        this.plugin.settings.notFoundPrompt = value;
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+      text.inputEl.cols = 50;
+    });
+    new import_obsidian3.Setting(containerEl).setName("Reset LLM settings").setDesc("Restore server URL, API key, model, temperature, system prompt, suggestion prompts, and not-found prompt to their defaults.").addButton(
       (button) => button.setButtonText("Reset to defaults").setClass("mod-warning").onClick(async () => {
         this.plugin.settings.llmServerUrl = DEFAULT_SETTINGS.llmServerUrl;
         this.plugin.settings.llmApiKey = DEFAULT_SETTINGS.llmApiKey;
@@ -2673,6 +2750,7 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
         this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
         this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
         this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
+        this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
         await this.plugin.saveSettings();
         this.display();
       })
@@ -2730,10 +2808,9 @@ var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSet
 };
 
 // src/ui/dictionary-view.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/dictionary/lookup.ts
-init_db();
 function fullLookup(word, options) {
   if (!isDatabaseReady()) {
     console.warn("[espa\xF1ol-diccionario] Database not ready for lookup");
@@ -2746,7 +2823,25 @@ function fullLookup(word, options) {
   let wordEntry = lookupWord(normalized, langHint);
   let resolvedFrom;
   if (!wordEntry) {
+    wordEntry = lookupWordNormalized(normalized, langHint);
+    if (wordEntry) {
+      resolvedFrom = normalized;
+    }
+  }
+  if (!wordEntry) {
     const lemmas = lemmatize(normalized, langHint || "es");
+    if (lemmas.length > 0) {
+      for (const lemma of lemmas) {
+        wordEntry = lookupWord(lemma.lemma, lemma.lang || langHint);
+        if (wordEntry) {
+          resolvedFrom = normalized;
+          break;
+        }
+      }
+    }
+  }
+  if (!wordEntry) {
+    const lemmas = lemmatizeNormalized(normalized, langHint || "es");
     if (lemmas.length > 0) {
       for (const lemma of lemmas) {
         wordEntry = lookupWord(lemma.lemma, lemma.lang || langHint);
@@ -2769,11 +2864,17 @@ function fullLookup(word, options) {
 }
 function searchDictionary(prefix, lang, limit = 20) {
   if (!isDatabaseReady()) return [];
-  return searchWords(prefix, lang, limit);
+  const normalized = prefix.toLowerCase().trim();
+  const exactResults = searchWords(normalized, lang, limit);
+  if (exactResults.length > 0) {
+    if (exactResults.length >= limit) return exactResults;
+    const accentResults = searchWordsNormalized(normalized, lang, limit - exactResults.length);
+    const seen = new Set(exactResults.map((w) => `${w.word}|${w.lang}`));
+    const additional = accentResults.filter((w) => !seen.has(`${w.word}|${w.lang}`));
+    return [...exactResults, ...additional].slice(0, limit);
+  }
+  return searchWordsNormalized(normalized, lang, limit);
 }
-
-// src/ui/dictionary-view.ts
-init_db();
 
 // src/audio/provider.ts
 function getAudioUrl(word) {
@@ -2802,7 +2903,7 @@ async function playAudio(word) {
         audioEl.removeEventListener("error", onError);
         clearTimeout(timer);
       };
-      const timer = setTimeout(onTimeout, 8e3);
+      const timer = setTimeout(onTimeout, AUDIO_LOAD_TIMEOUT_MS);
       audioEl.addEventListener("canplaythrough", onCanPlay, { once: true });
       audioEl.addEventListener("error", onError, { once: true });
       audioEl.load();
@@ -2815,11 +2916,445 @@ async function playAudio(word) {
   }
 }
 
+// src/ui/result-renderer.ts
+var EMPTY_STATE_HTML = `<div class="ed-empty-state">
+	<div class="ed-empty-icon">\u{1F4D6}</div>
+	<div class="ed-empty-text">Type a word above to look it up</div>
+	<div class="ed-empty-hint">Supports Spanish \u2194 English, including conjugated forms</div>
+</div>`;
+function renderResult(result, maxSentences = 5) {
+  const { word, definitions, sentences, resolvedFrom } = result;
+  const parts = [];
+  if (resolvedFrom) {
+    parts.push(`<div class="ed-resolved-from">${escapeHtml(resolvedFrom)} \u2192 ${makeClickable(word.word, word.lang)}</div>`);
+  }
+  const headerParts = [];
+  headerParts.push(`<span class="ed-word">${escapeHtml(word.word)}</span>`);
+  if (word.pos) {
+    headerParts.push(`<span class="ed-pos">${escapeHtml(word.pos)}</span>`);
+  }
+  if (word.ipa) {
+    headerParts.push(`<span class="ed-ipa">${escapeHtml(word.ipa)}</span>`);
+  }
+  parts.push(`<div class="ed-header">${headerParts.join(" ")}</div>`);
+  parts.push(renderExternalLinks(word.word, word.lang));
+  if (word.lang === "es") {
+    parts.push(renderAudioButton(word.word));
+  }
+  if (definitions.length > 0) {
+    parts.push(renderDefinitions(definitions, word.lang));
+  }
+  if (sentences.length > 0) {
+    parts.push(renderSentences(sentences.slice(0, maxSentences)));
+  }
+  return `<div class="ed-result">${parts.join("")}</div>`;
+}
+function renderAudioButton(word) {
+  return `<div class="ed-audio">
+		<button class="ed-audio-btn" data-word="${escapeHtml(word)}" data-action="play-audio" title="Play pronunciation">
+			\u{1F50A} Listen
+		</button>
+	</div>`;
+}
+var EXTERNAL_SITES = [
+  {
+    key: "wr",
+    label: "WordReference",
+    icon: "WR",
+    url: (w, lang) => lang === "es" ? `https://www.wordreference.com/es/en/translation.asp?spen=${encodeURIComponent(w)}` : `https://www.wordreference.com/es/translation.asp?en=${encodeURIComponent(w)}`
+  },
+  {
+    key: "rae",
+    label: "RAE (Real Academia Espa\xF1ola)",
+    icon: "RAE",
+    url: (w) => `https://dle.rae.es/${encodeURIComponent(w)}`
+  },
+  {
+    key: "sd",
+    label: "SpanishDict",
+    icon: "SD",
+    url: (w) => `https://www.spanishdict.com/translate/${encodeURIComponent(w)}`
+  },
+  {
+    key: "linguee",
+    label: "Linguee",
+    icon: "Li",
+    url: (w, lang) => lang === "es" ? `https://www.linguee.com/english-spanish/search?source=auto&query=${encodeURIComponent(w)}` : `https://www.linguee.com/spanish-english/search?source=auto&query=${encodeURIComponent(w)}`
+  },
+  {
+    key: "reverso",
+    label: "Reverso Context",
+    icon: "RC",
+    url: (w, lang) => `https://context.reverso.net/translation/${lang === "es" ? "spanish-english" : "english-spanish"}/${encodeURIComponent(w)}`
+  }
+];
+function renderExternalLinks(word, lang) {
+  const links = EXTERNAL_SITES.map((site) => {
+    if (site.key === "rae" && lang !== "es") return "";
+    const href = site.url(word, lang);
+    return `<a class="ed-ext-link ed-ext-${site.key}" data-url="${escapeHtml(href)}" data-title="${escapeHtml(site.label)}" title="${site.label}" role="button" tabindex="0">${site.icon}</a>`;
+  }).filter(Boolean).join("");
+  return `<div class="ed-ext-links">${links}</div>`;
+}
+function renderDefinitions(definitions, lang) {
+  const items = definitions.map((def, i) => {
+    const num = def.senseNum || i + 1;
+    const defHtml = lang === "en" ? makeReverseDefClickable(def.definition) : makeEnglishDefClickable(def.definition);
+    let html = `<span class="ed-def-num">${num}.</span> <span class="ed-def-text">${defHtml}</span>`;
+    if (def.tags) {
+      try {
+        const tags = JSON.parse(def.tags);
+        if (Array.isArray(tags) && tags.length > 0) {
+          const displayTags = tags.filter((t) => t !== "es" && t.length > 1);
+          if (displayTags.length > 0) {
+            html += ` <span class="ed-def-tags">${displayTags.map((t) => escapeHtml(t)).join(", ")}</span>`;
+          }
+        }
+      } catch {
+        if (def.tags !== '["es"]') {
+          html += ` <span class="ed-def-tags">${escapeHtml(def.tags)}</span>`;
+        }
+      }
+    }
+    if (def.context) {
+      html += ` <span class="ed-def-context">(${escapeHtml(def.context)})</span>`;
+    }
+    return `<li class="ed-def-item">${html}</li>`;
+  }).join("");
+  return `<div class="ed-definitions">
+		<div class="ed-section-title">Definitions</div>
+		<ol class="ed-def-list">${items}</ol>
+	</div>`;
+}
+function makeReverseDefClickable(text) {
+  const result = text.replace(
+    /\b([a-záéíóúñüÁÉÍÓÚÑÜ]+(?:[a-záéíóúñüÁÉÍÓÚÑÜ]*))\s*(?:\(([^)]*)\))?/gi,
+    (fullMatch, word, pos) => {
+      return makeClickable(word, "es") + (pos ? ` <span class="ed-def-tags">${escapeHtml(pos)}</span>` : "");
+    }
+  );
+  return result;
+}
+function makeEnglishDefClickable(text) {
+  return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word, offset) => {
+    const skip = /* @__PURE__ */ new Set(["the", "and", "that", "this", "with", "from", "for", "not", "but", "who", "whom", "whose", "which", "what", "where", "when", "how", "than", "then", "also", "very", "much", "more", "most", "some", "such", "only", "own", "same", "will", "shall", "may", "might", "can", "could", "would", "should", "has", "have", "had", "been", "being", "does", "did", "done", "made", "make", "like", "just", "over", "into", "also", "back", "because", "through", "between", "before", "after", "while", "during", "without", "within", "about", "above", "below", "under", "these", "those", "other", "another", "each", "every", "both", "few", "many", "several", "there", "here", "where", "when", "why", "still", "even", "too", "yet", "nor", "either", "neither", "though", "although", "except", "since", "until", "upon"]);
+    if (skip.has(word.toLowerCase())) return escapeHtml(match);
+    return makeClickable(word, "en");
+  });
+}
+function renderSentences(sentences) {
+  const items = sentences.map((s) => {
+    let html = "";
+    if (s.sentenceEs) {
+      html += `<div class="ed-sentence-es">${makeSentenceClickable(s.sentenceEs, "es")}</div>`;
+    }
+    if (s.sentenceEn) {
+      html += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentenceEn, "en")}</div>`;
+    }
+    return `<li class="ed-sentence-item">${html}</li>`;
+  }).join("");
+  return `<div class="ed-sentences">
+		<div class="ed-section-title">Example Sentences</div>
+		<ul class="ed-sentence-list">${items}</ul>
+	</div>`;
+}
+function makeClickable(word, lang) {
+  return `<span class="ed-clickable-word" data-lookup="${escapeHtml(word)}" data-lang="${escapeHtml(lang)}" title="Look up: ${escapeHtml(word)}">${escapeHtml(word)}</span>`;
+}
+function makeSentenceClickable(sentence, lang) {
+  return sentence.replace(/[a-záéíóúñüÁÉÍÓÚÑÜ]+[a-záéíóúñüÁÉÍÓÚÑÜ']*/gi, (match) => {
+    if (match.length >= 3) {
+      return makeClickable(match, lang);
+    }
+    return escapeHtml(match);
+  });
+}
+function renderNotFound(word, lang) {
+  const langLabel = lang === "es" ? "Spanish" : lang === "en" ? "English" : "";
+  return `<div class="ed-not-found">
+		<div class="ed-not-found-word">${escapeHtml(word)}</div>
+		<div class="ed-not-found-msg">${langLabel ? `${langLabel} word` : "Word"} not found in the dictionary.</div>
+		<div class="ed-not-found-hint">Try a different spelling or the dictionary form (infinitive for verbs, singular for nouns).</div>
+		<div class="ed-not-found-ask-ai"><a class="ed-ask-ai-link" data-action="ask-ai" data-word="${escapeHtml(word)}" data-lang="${escapeHtml(lang || "")}" role="button" tabindex="0">\u{1F4AC} Ask AI about this word</a></div>
+	</div>`;
+}
+function renderLoading(word) {
+  return `<div class="ed-loading">
+		<div class="ed-spinner"></div>
+		<div>Looking up <strong>${escapeHtml(word)}</strong>...</div>
+	</div>`;
+}
+function renderDbLoading() {
+  return `<div class="ed-loading">
+		<div class="ed-spinner"></div>
+		<div>Loading dictionary database...</div>
+	</div>`;
+}
+function renderDbError(error) {
+  return `<div class="ed-error">
+		<div class="ed-error-title">Dictionary Error</div>
+		<div class="ed-error-msg">${escapeHtml(error)}</div>
+	</div>`;
+}
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// src/ui/search-controller.ts
+var SearchController = class {
+  constructor(onSearch) {
+    this.typeaheadTimeout = null;
+    this.typeaheadIndex = -1;
+    this.typeaheadItems = [];
+    this.searchTimeout = null;
+    this.onSearch = onSearch;
+  }
+  /** Initialize UI elements and event handlers (called once from onOpen) */
+  init(searchInput, typeaheadList, searchForm) {
+    this.searchInput = searchInput;
+    this.typeaheadList = typeaheadList;
+    searchForm.addEventListener("submit", (evt) => {
+      evt.preventDefault();
+      this.onSearch(this.searchInput.value.trim());
+      this.hideTypeahead();
+    });
+    this.searchInput.addEventListener("keydown", (evt) => {
+      if (!this.typeaheadList.classList.contains("ed-hidden")) {
+        if (evt.key === "ArrowDown") {
+          evt.preventDefault();
+          this.navigateTypeahead(1);
+          return;
+        }
+        if (evt.key === "ArrowUp") {
+          evt.preventDefault();
+          this.navigateTypeahead(-1);
+          return;
+        }
+        if (evt.key === "Enter" && this.typeaheadIndex >= 0) {
+          evt.preventDefault();
+          this.selectTypeaheadItem(this.typeaheadIndex);
+          return;
+        }
+        if (evt.key === "Escape") {
+          this.hideTypeahead();
+          return;
+        }
+      }
+    });
+    this.searchInput.addEventListener("blur", () => {
+      setTimeout(() => this.hideTypeahead(), 200);
+    });
+    this.searchInput.addEventListener("input", () => {
+      if (this.searchTimeout) clearTimeout(this.searchTimeout);
+      this.searchTimeout = setTimeout(() => this.onSearch(this.searchInput.value.trim()), SEARCH_DEBOUNCE_MS);
+      this.updateTypeahead();
+    });
+  }
+  /** Set the search input value (e.g., from navigation or word click) */
+  setSearchText(word) {
+    this.searchInput.value = word;
+  }
+  /** Focus the search input */
+  focus() {
+    if (this.searchInput) {
+      this.searchInput.focus();
+    }
+  }
+  /** Trigger an immediate search (debounced) */
+  triggerSearch() {
+    if (this.searchTimeout) clearTimeout(this.searchTimeout);
+    this.searchTimeout = setTimeout(() => this.onSearch(this.searchInput.value.trim()), 0);
+  }
+  /** Clean up pending timeouts */
+  cleanup() {
+    if (this.searchTimeout) clearTimeout(this.searchTimeout);
+    if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);
+  }
+  // ============================================================
+  // Typeahead / autocomplete
+  // ============================================================
+  updateTypeahead() {
+    if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);
+    const text = this.searchInput.value.trim();
+    if (text.length < 2) {
+      this.hideTypeahead();
+      return;
+    }
+    this.typeaheadTimeout = setTimeout(() => {
+      if (!isDatabaseReady()) return;
+      const results = searchDictionary(text, void 0, MAX_TYPEAHEAD_RESULTS);
+      const seen = /* @__PURE__ */ new Set();
+      const unique = results.filter((w) => {
+        const key = `${w.word}|${w.pos}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (unique.length === 0) {
+        this.hideTypeahead();
+        return;
+      }
+      this.typeaheadItems = unique.map((w) => ({ word: w.word, pos: w.pos || "", lang: w.lang }));
+      this.typeaheadIndex = -1;
+      this.typeaheadList.empty();
+      for (let i = 0; i < this.typeaheadItems.length; i++) {
+        const item = this.typeaheadItems[i];
+        const div = this.typeaheadList.createDiv({ cls: "ed-typeahead-item" });
+        div.createSpan({ cls: "ed-typeahead-word", text: item.word });
+        const meta = div.createSpan({ cls: "ed-typeahead-meta" });
+        if (item.pos) meta.createSpan({ cls: "ed-typeahead-pos", text: item.pos });
+        meta.createSpan({ cls: `ed-typeahead-flag ed-lang-${item.lang}` });
+        div.addEventListener("mousedown", (evt) => {
+          evt.preventDefault();
+          this.selectTypeaheadItem(i);
+        });
+      }
+      this.typeaheadList.classList.remove("ed-hidden");
+    }, TYPEAHEAD_DEBOUNCE_MS);
+  }
+  navigateTypeahead(direction) {
+    const items = this.typeaheadList.querySelectorAll(".ed-typeahead-item");
+    if (items.length === 0) return;
+    if (this.typeaheadIndex >= 0 && this.typeaheadIndex < items.length) {
+      items[this.typeaheadIndex].classList.remove("ed-typeahead-active");
+    }
+    this.typeaheadIndex += direction;
+    if (this.typeaheadIndex < 0) this.typeaheadIndex = items.length - 1;
+    if (this.typeaheadIndex >= items.length) this.typeaheadIndex = 0;
+    items[this.typeaheadIndex].classList.add("ed-typeahead-active");
+    const item = this.typeaheadItems[this.typeaheadIndex];
+    if (item) {
+      this.searchInput.value = item.word;
+    }
+  }
+  selectTypeaheadItem(index) {
+    const item = this.typeaheadItems[index];
+    if (!item) return;
+    this.searchInput.value = item.word;
+    this.hideTypeahead();
+    this.onSearch(item.word);
+  }
+  hideTypeahead() {
+    if (this.typeaheadList) {
+      this.typeaheadList.classList.add("ed-hidden");
+    }
+    this.typeaheadIndex = -1;
+    this.typeaheadItems = [];
+  }
+};
+
+// src/ui/nav-history.ts
+var NavHistory = class {
+  constructor(onNavigate) {
+    this.history = [];
+    this.index = -1;
+    this.currentWord = "";
+    this.onNavigate = onNavigate;
+  }
+  /** Initialize UI element references (called once from onOpen) */
+  init(navButtons, recentsBtn, recentsDropdown) {
+    this.navButtons = navButtons;
+    this.recentsBtn = recentsBtn;
+    this.recentsDropdown = recentsDropdown;
+    this.navButtons.back.addEventListener("click", () => this.navigateBack());
+    this.navButtons.forward.addEventListener("click", () => this.navigateForward());
+    this.recentsBtn.addEventListener("click", () => this.toggleRecents());
+  }
+  /** Load persisted history from plugin settings */
+  loadFromSettings(savedHistory) {
+    if (Array.isArray(savedHistory) && savedHistory.length > 0) {
+      this.history = savedHistory;
+      this.index = savedHistory.length - 1;
+      this.updateNavButtons();
+    }
+  }
+  /** Get history for persistence */
+  getHistory() {
+    return this.history;
+  }
+  /** Update the "current word" tracker (for recents highlighting) */
+  setCurrentWord(word) {
+    this.currentWord = word;
+  }
+  /** Push a word onto the navigation stack */
+  push(word) {
+    if (this.index < this.history.length - 1) {
+      this.history = this.history.slice(0, this.index + 1);
+    }
+    if (this.history.length > 0 && this.history[this.history.length - 1] === word) {
+      return;
+    }
+    this.history.push(word);
+    this.index = this.history.length - 1;
+    this.updateNavButtons();
+  }
+  navigateBack() {
+    if (this.index <= 0) return;
+    this.index--;
+    const word = this.history[this.index];
+    this.onNavigate(word);
+    this.updateNavButtons();
+  }
+  navigateForward() {
+    if (this.index >= this.history.length - 1) return;
+    this.index++;
+    const word = this.history[this.index];
+    this.onNavigate(word);
+    this.updateNavButtons();
+  }
+  updateNavButtons() {
+    if (!this.navButtons) return;
+    this.navButtons.back.disabled = this.index <= 0;
+    this.navButtons.forward.disabled = this.index >= this.history.length - 1;
+    this.recentsBtn.disabled = this.history.length === 0;
+  }
+  // ============================================================
+  // Recents dropdown
+  // ============================================================
+  toggleRecents() {
+    if (this.recentsDropdown.classList.contains("ed-hidden")) {
+      this.showRecents();
+    } else {
+      this.hideRecents();
+    }
+  }
+  showRecents(onSelect = this.onNavigate) {
+    this.recentsDropdown.empty();
+    const recent = this.history.slice(-MAX_RECENT_WORDS).reverse();
+    if (recent.length === 0) {
+      this.recentsDropdown.createDiv({ cls: "ed-recents-empty", text: "No recent words" });
+    } else {
+      for (const word of recent) {
+        const item = this.recentsDropdown.createDiv({ cls: "ed-recents-item" });
+        item.createSpan({ cls: "ed-recents-word", text: word });
+        if (word === this.currentWord) {
+          item.classList.add("ed-recents-current");
+        }
+        item.addEventListener("click", () => {
+          this.hideRecents();
+          onSelect(word);
+        });
+      }
+    }
+    this.recentsDropdown.classList.remove("ed-hidden");
+  }
+  hideRecents() {
+    if (this.recentsDropdown) {
+      this.recentsDropdown.classList.add("ed-hidden");
+    }
+  }
+};
+
+// src/ui/chat-controller.ts
+var import_obsidian5 = require("obsidian");
+
 // src/chat/provider.ts
 var import_obsidian4 = require("obsidian");
 function buildApiUrl(serverUrl) {
   const base = serverUrl.replace(/\/+$/, "");
-  const isOllama = base.includes("localhost:11434") || base.includes("127.0.0.1:11434");
+  const isOllama = OLLAMA_LOCAL_HOSTS.some((h) => base.includes(h));
   if (base.endsWith("/chat/completions") || base.endsWith("/api/chat")) {
     return { url: base, isOllama };
   }
@@ -2896,7 +3431,7 @@ ${wordContext}` : systemPrompt
 }
 async function streamChatMessage(messages, settings, onChunk, wordContext) {
   const { llmServerUrl } = settings;
-  const isLocalOllama = llmServerUrl.includes("localhost:11434") || llmServerUrl.includes("127.0.0.1:11434");
+  const isLocalOllama = OLLAMA_LOCAL_HOSTS.some((h) => llmServerUrl.includes(h));
   if (isLocalOllama && !import_obsidian4.Platform.isMobile) {
     try {
       const response2 = await streamWithFetch(messages, settings, onChunk, wordContext);
@@ -3019,518 +3554,41 @@ ${wordContext}` : systemPrompt
   }
 }
 
-// src/ui/result-renderer.ts
-function renderResult(result, maxSentences = 5) {
-  const { word, definitions, sentences, resolvedFrom } = result;
-  const parts = [];
-  if (resolvedFrom) {
-    parts.push(`<div class="ed-resolved-from">${escapeHtml(resolvedFrom)} \u2192 ${makeClickable(word.word, word.lang)}</div>`);
-  }
-  const headerParts = [];
-  headerParts.push(`<span class="ed-word">${escapeHtml(word.word)}</span>`);
-  if (word.pos) {
-    headerParts.push(`<span class="ed-pos">${escapeHtml(word.pos)}</span>`);
-  }
-  if (word.ipa) {
-    headerParts.push(`<span class="ed-ipa">${escapeHtml(word.ipa)}</span>`);
-  }
-  parts.push(`<div class="ed-header">${headerParts.join(" ")}</div>`);
-  parts.push(renderExternalLinks(word.word, word.lang));
-  if (word.lang === "es") {
-    parts.push(renderAudioButton(word.word));
-  }
-  if (definitions.length > 0) {
-    parts.push(renderDefinitions(definitions, word.lang));
-  }
-  if (sentences.length > 0) {
-    parts.push(renderSentences(sentences.slice(0, maxSentences)));
-  }
-  return `<div class="ed-result">${parts.join("")}</div>`;
-}
-function renderAudioButton(word) {
-  return `<div class="ed-audio">
-		<button class="ed-audio-btn" data-word="${escapeHtml(word)}" data-action="play-audio" title="Play pronunciation">
-			\u{1F50A} Listen
-		</button>
-	</div>`;
-}
-var EXTERNAL_SITES = [
-  {
-    key: "wr",
-    label: "WordReference",
-    icon: "WR",
-    url: (w, lang) => lang === "es" ? `https://www.wordreference.com/es/en/translation.asp?spen=${encodeURIComponent(w)}` : `https://www.wordreference.com/es/translation.asp?en=${encodeURIComponent(w)}`
-  },
-  {
-    key: "rae",
-    label: "RAE (Real Academia Espa\xF1ola)",
-    icon: "RAE",
-    url: (w) => `https://dle.rae.es/${encodeURIComponent(w)}`
-  },
-  {
-    key: "sd",
-    label: "SpanishDict",
-    icon: "SD",
-    url: (w) => `https://www.spanishdict.com/translate/${encodeURIComponent(w)}`
-  },
-  {
-    key: "linguee",
-    label: "Linguee",
-    icon: "Li",
-    url: (w, lang) => lang === "es" ? `https://www.linguee.com/english-spanish/search?source=auto&query=${encodeURIComponent(w)}` : `https://www.linguee.com/spanish-english/search?source=auto&query=${encodeURIComponent(w)}`
-  },
-  {
-    key: "reverso",
-    label: "Reverso Context",
-    icon: "RC",
-    url: (w, lang) => `https://context.reverso.net/translation/${lang === "es" ? "spanish-english" : "english-spanish"}/${encodeURIComponent(w)}`
-  }
-];
-function renderExternalLinks(word, lang) {
-  const links = EXTERNAL_SITES.map((site) => {
-    if (site.key === "rae" && lang !== "es") return "";
-    const href = site.url(word, lang);
-    return `<a class="ed-ext-link ed-ext-${site.key}" data-url="${escapeHtml(href)}" data-title="${escapeHtml(site.label)}" title="${site.label}" role="button" tabindex="0">${site.icon}</a>`;
-  }).filter(Boolean).join("");
-  return `<div class="ed-ext-links">${links}</div>`;
-}
-function renderDefinitions(definitions, lang) {
-  const items = definitions.map((def, i) => {
-    const num = def.sense_num || i + 1;
-    const defHtml = lang === "en" ? makeReverseDefClickable(def.definition) : makeEnglishDefClickable(def.definition);
-    let html = `<span class="ed-def-num">${num}.</span> <span class="ed-def-text">${defHtml}</span>`;
-    if (def.tags) {
-      try {
-        const tags = JSON.parse(def.tags);
-        if (Array.isArray(tags) && tags.length > 0) {
-          const displayTags = tags.filter((t) => t !== "es" && t.length > 1);
-          if (displayTags.length > 0) {
-            html += ` <span class="ed-def-tags">${displayTags.map((t) => escapeHtml(t)).join(", ")}</span>`;
-          }
-        }
-      } catch {
-        if (def.tags !== '["es"]') {
-          html += ` <span class="ed-def-tags">${escapeHtml(def.tags)}</span>`;
-        }
-      }
-    }
-    if (def.context) {
-      html += ` <span class="ed-def-context">(${escapeHtml(def.context)})</span>`;
-    }
-    return `<li class="ed-def-item">${html}</li>`;
-  }).join("");
-  return `<div class="ed-definitions">
-		<div class="ed-section-title">Definitions</div>
-		<ol class="ed-def-list">${items}</ol>
-	</div>`;
-}
-function makeReverseDefClickable(text) {
-  const result = text.replace(
-    /\b([a-záéíóúñüÁÉÍÓÚÑÜ]+(?:[a-záéíóúñüÁÉÍÓÚÑÜ]*))\s*(?:\(([^)]*)\))?/gi,
-    (fullMatch, word, pos) => {
-      return makeClickable(word, "es") + (pos ? ` <span class="ed-def-tags">${escapeHtml(pos)}</span>` : "");
-    }
-  );
-  return result;
-}
-function makeEnglishDefClickable(text) {
-  return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word, offset) => {
-    const skip = /* @__PURE__ */ new Set(["the", "and", "that", "this", "with", "from", "for", "not", "but", "who", "whom", "whose", "which", "what", "where", "when", "how", "than", "then", "also", "very", "much", "more", "most", "some", "such", "only", "own", "same", "will", "shall", "may", "might", "can", "could", "would", "should", "has", "have", "had", "been", "being", "does", "did", "done", "made", "make", "like", "just", "over", "into", "also", "back", "because", "through", "between", "before", "after", "while", "during", "without", "within", "about", "above", "below", "under", "these", "those", "other", "another", "each", "every", "both", "few", "many", "several", "there", "here", "where", "when", "why", "still", "even", "too", "yet", "nor", "either", "neither", "though", "although", "except", "since", "until", "upon"]);
-    if (skip.has(word.toLowerCase())) return escapeHtml(match);
-    return makeClickable(word, "en");
-  });
-}
-function renderSentences(sentences) {
-  const items = sentences.map((s) => {
-    let html = "";
-    if (s.sentence_es) {
-      html += `<div class="ed-sentence-es">${makeSentenceClickable(s.sentence_es, "es")}</div>`;
-    }
-    if (s.sentence_en) {
-      html += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentence_en, "en")}</div>`;
-    }
-    return `<li class="ed-sentence-item">${html}</li>`;
-  }).join("");
-  return `<div class="ed-sentences">
-		<div class="ed-section-title">Example Sentences</div>
-		<ul class="ed-sentence-list">${items}</ul>
-	</div>`;
-}
-function makeClickable(word, lang) {
-  return `<span class="ed-clickable-word" data-lookup="${escapeHtml(word)}" data-lang="${escapeHtml(lang)}" title="Look up: ${escapeHtml(word)}">${escapeHtml(word)}</span>`;
-}
-function makeSentenceClickable(sentence, lang) {
-  return sentence.replace(/[a-záéíóúñüÁÉÍÓÚÑÜ]+[a-záéíóúñüÁÉÍÓÚÑÜ']*/gi, (match) => {
-    if (match.length >= 3) {
-      return makeClickable(match, lang);
-    }
-    return escapeHtml(match);
-  });
-}
-function renderNotFound(word, lang) {
-  const langLabel = lang === "es" ? "Spanish" : lang === "en" ? "English" : "";
-  return `<div class="ed-not-found">
-		<div class="ed-not-found-word">${escapeHtml(word)}</div>
-		<div class="ed-not-found-msg">${langLabel ? `${langLabel} word` : "Word"} not found in the dictionary.</div>
-		<div class="ed-not-found-hint">Try a different spelling or the dictionary form (infinitive for verbs, singular for nouns).</div>
-	</div>`;
-}
-function renderLoading(word) {
-  return `<div class="ed-loading">
-		<div class="ed-spinner"></div>
-		<div>Looking up <strong>${escapeHtml(word)}</strong>...</div>
-	</div>`;
-}
-function renderDbLoading() {
-  return `<div class="ed-loading">
-		<div class="ed-spinner"></div>
-		<div>Loading dictionary database...</div>
-	</div>`;
-}
-function renderDbError(error) {
-  return `<div class="ed-error">
-		<div class="ed-error-title">Dictionary Error</div>
-		<div class="ed-error-msg">${escapeHtml(error)}</div>
-	</div>`;
-}
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// src/ui/dictionary-view.ts
-var VIEW_TYPE_ESPANOL_DICCIONARIO = "espanol-diccionario-view";
-var DictionaryView = class extends import_obsidian5.ItemView {
-  constructor(leaf, plugin) {
-    super(leaf);
-    this.searchTimeout = null;
-    this.typeaheadTimeout = null;
-    this.typeaheadIndex = -1;
-    this.typeaheadItems = [];
-    // Result state
-    this.currentResult = null;
-    this.currentWord = "";
-    // Navigation history
-    this.navHistory = [];
-    this.navIndex = -1;
-    // Chat state
-    this.chatMessages = [];
+// src/ui/chat-controller.ts
+var ChatController = class {
+  constructor(app, component, getSettings, saveSettings, getCurrentResult) {
+    this.messages = [];
     this.chatHistoryIndex = -1;
     this.chatInputBeforeHistory = "";
     this.isStreaming = false;
-    this.plugin = plugin;
+    this.app = app;
+    this.component = component;
+    this.settings = getSettings;
+    this.saveSettings = saveSettings;
+    this.currentResult = getCurrentResult;
   }
-  getViewType() {
-    return VIEW_TYPE_ESPANOL_DICCIONARIO;
-  }
-  getDisplayText() {
-    return "Espa\xF1ol Diccionario";
-  }
-  getIcon() {
-    return "book-open";
-  }
-  async onOpen() {
-    const container = this.containerEl.children[1];
-    container.empty();
-    container.classList.add("espanol-diccionario");
-    const searchDiv = container.createDiv({ cls: "ed-search-container" });
-    const navDiv = searchDiv.createDiv({ cls: "ed-nav-buttons" });
-    this.navButtons = {
-      back: navDiv.createEl("button", {
-        cls: "ed-nav-btn ed-nav-back",
-        attr: { type: "button", title: "Back (Alt+\u2190)" }
-      }),
-      forward: navDiv.createEl("button", {
-        cls: "ed-nav-btn ed-nav-forward",
-        attr: { type: "button", title: "Forward (Alt+\u2192)" }
-      })
-    };
-    this.navButtons.back.setText("\u2190");
-    this.navButtons.forward.setText("\u2192");
-    this.navButtons.back.disabled = true;
-    this.navButtons.forward.disabled = true;
-    this.navButtons.back.addEventListener("click", () => this.navigateBack());
-    this.navButtons.forward.addEventListener("click", () => this.navigateForward());
-    this.recentsBtn = navDiv.createEl("button", {
-      cls: "ed-nav-btn ed-nav-recents-btn",
-      attr: { type: "button", title: "Recent words" }
-    });
-    this.recentsBtn.setText("\u{1F550}");
-    this.recentsBtn.disabled = true;
-    this.recentsBtn.addEventListener("click", () => this.toggleRecents());
-    this.chatToggleBtn = navDiv.createEl("button", {
-      cls: "ed-nav-btn ed-chat-toggle-btn",
-      attr: { type: "button", title: "Toggle chat" }
-    });
-    this.chatToggleBtn.setText("\u{1F4AC}");
-    this.chatToggleBtn.addEventListener("click", () => this.toggleChat());
-    this.recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
-    const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
-    this.searchInput = searchForm.createEl("input", {
-      type: "text",
-      cls: "ed-search-input",
-      attr: {
-        placeholder: "Search a word (Spanish or English)...",
-        autocomplete: "off",
-        spellcheck: "false"
-      }
-    });
-    const searchBtn = searchForm.createEl("button", {
-      cls: "ed-search-btn",
-      attr: { type: "submit" }
-    });
-    searchBtn.setText("\u{1F50D}");
-    searchForm.addEventListener("submit", (evt) => {
-      evt.preventDefault();
-      this.hideRecents();
-      this.doSearch();
-    });
-    this.typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
-    this.searchInput.addEventListener("keydown", (evt) => {
-      if (!this.typeaheadList.classList.contains("ed-hidden")) {
-        if (evt.key === "ArrowDown") {
-          evt.preventDefault();
-          this.navigateTypeahead(1);
-          return;
-        }
-        if (evt.key === "ArrowUp") {
-          evt.preventDefault();
-          this.navigateTypeahead(-1);
-          return;
-        }
-        if (evt.key === "Enter" && this.typeaheadIndex >= 0) {
-          evt.preventDefault();
-          this.selectTypeaheadItem(this.typeaheadIndex);
-          return;
-        }
-        if (evt.key === "Escape") {
-          this.hideTypeahead();
-          return;
-        }
-      }
-    });
-    this.searchInput.addEventListener("blur", () => {
-      setTimeout(() => this.hideTypeahead(), 200);
-    });
-    this.searchInput.addEventListener("input", () => {
-      if (this.searchTimeout) clearTimeout(this.searchTimeout);
-      this.searchTimeout = setTimeout(() => this.doSearch(), 300);
-      this.updateTypeahead();
-    });
-    const resultArea = container.createDiv({ cls: "ed-result-area", attr: { id: "ed-result-area" } });
-    this.chatSuggestionsContainer = container.createDiv({ cls: "ed-suggestion-links" });
-    if (!isDatabaseReady()) {
-      resultArea.innerHTML = renderDbLoading();
-    } else {
-      resultArea.innerHTML = `<div class="ed-empty-state">
-				<div class="ed-empty-icon">\u{1F4D6}</div>
-				<div class="ed-empty-text">Type a word above to look it up</div>
-				<div class="ed-empty-hint">Supports Spanish \u2194 English, including conjugated forms</div>
-			</div>`;
-    }
-    const chatSection = container.createDiv({ cls: "ed-chat-section" });
-    this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
-    const chatToolbar = this.chatContainer.createDiv({ cls: "ed-chat-toolbar" });
-    this.chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
-    const clearBtn = chatToolbar.createEl("button", {
-      cls: "ed-chat-clear-btn",
-      attr: { type: "button", title: "Clear chat" }
-    });
-    clearBtn.setText("\u{1F5D1} Clear");
-    clearBtn.addEventListener("click", () => this.clearChat());
-    const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
-    const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
-    this.chatInput = chatForm.createEl("input", {
-      type: "text",
-      cls: "ed-chat-input",
-      attr: {
-        placeholder: "Ask a question about this word or Spanish grammar..."
-      }
-    });
+  /** Initialize UI element references (called once from onOpen) */
+  init(chatContainer, chatInput, chatModelLabel, chatRecentsDropdown, chatToggleBtn, chatSuggestionsContainer, chatForm, chatRecentsBtn) {
+    this.chatContainer = chatContainer;
+    this.chatInput = chatInput;
+    this.chatModelLabel = chatModelLabel;
+    this.chatRecentsDropdown = chatRecentsDropdown;
+    this.chatToggleBtn = chatToggleBtn;
+    this.chatSuggestionsContainer = chatSuggestionsContainer;
     this.chatInput.addEventListener("keydown", (evt) => {
       if (evt.key === "ArrowUp" || evt.key === "ArrowDown") {
         evt.preventDefault();
         this.navigateChatHistory(evt.key === "ArrowUp" ? -1 : 1);
       }
     });
-    const chatActions = chatForm.createDiv({ cls: "ed-chat-actions" });
-    const chatRecentsBtn = chatActions.createEl("button", {
-      cls: "ed-chat-recents-btn",
-      attr: { type: "button", title: "Prompt history" }
-    });
-    chatRecentsBtn.setText("\u{1F552}");
-    chatRecentsBtn.addEventListener("click", (evt) => {
-      evt.stopPropagation();
-      this.toggleChatRecents();
-    });
-    const chatSendBtn = chatActions.createEl("button", {
-      cls: "ed-chat-send-btn",
-      attr: { type: "submit" }
-    });
-    chatSendBtn.setText("Send");
-    this.chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
     chatForm.addEventListener("submit", (evt) => {
       evt.preventDefault();
       this.sendChat();
     });
-    container.addEventListener("click", (evt) => {
-      const target = evt.target;
-      if (!target.closest(".ed-recents") && !target.closest(".ed-nav-recents-btn")) {
-        this.hideRecents();
-      }
-      if (!target.closest(".ed-chat-recents-dropdown") && !target.closest(".ed-chat-recents-btn")) {
-        this.chatRecentsDropdown?.classList.add("ed-hidden");
-      }
-      if (target.closest("[data-action='play-audio']")) {
-        this.handlePlayAudio(target.closest("[data-action='play-audio']"));
-      } else if (target.closest(".ed-clickable-word")) {
-        this.handleWordClick(target.closest(".ed-clickable-word"));
-      } else if (target.closest(".ed-ext-link")) {
-        this.handleExtLink(target.closest(".ed-ext-link"));
-      }
+    chatRecentsBtn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      this.toggleChatRecents();
     });
-    this.searchInput.focus();
-    this.loadHistory();
-    this.updateChatModelLabel();
-    this.containerEl.addEventListener("keydown", (evt) => {
-      if (evt.altKey && evt.key === "ArrowLeft") {
-        evt.preventDefault();
-        this.navigateBack();
-      } else if (evt.altKey && evt.key === "ArrowRight") {
-        evt.preventDefault();
-        this.navigateForward();
-      }
-    });
-  }
-  async onClose() {
-  }
-  /**
-   * Focus the search input
-   */
-  focusSearch() {
-    if (this.searchInput) {
-      this.searchInput.focus();
-    }
-  }
-  /**
-   * Update the view when database becomes ready
-   */
-  notifyDatabaseReady() {
-    const resultArea = this.containerEl.querySelector("#ed-result-area");
-    if (resultArea) {
-      const emptyState = resultArea.querySelector(".ed-loading");
-      if (emptyState) {
-        resultArea.innerHTML = `<div class="ed-empty-state">
-					<div class="ed-empty-icon">\u{1F4D6}</div>
-					<div class="ed-empty-text">Type a word above to look it up</div>
-					<div class="ed-empty-hint">Supports Spanish \u2194 English, including conjugated forms</div>
-				</div>`;
-      }
-    }
-  }
-  /**
-   * Notify the view of a database error
-   */
-  notifyDatabaseError(error) {
-    const resultArea = this.containerEl.querySelector("#ed-result-area");
-    if (resultArea) {
-      resultArea.innerHTML = renderDbError(error);
-    }
-  }
-  doSearch() {
-    const word = this.searchInput.value.trim();
-    if (!word) {
-      const resultArea = this.containerEl.querySelector("#ed-result-area");
-      if (resultArea) {
-        resultArea.innerHTML = `<div class="ed-empty-state">
-					<div class="ed-empty-icon">\u{1F4D6}</div>
-					<div class="ed-empty-text">Type a word above to look it up</div>
-				</div>`;
-      }
-      return;
-    }
-    this.doLookup(word, true);
-  }
-  /**
-   * Core lookup logic. pushHistory=true when user initiates search (not from navigation)
-   */
-  doLookup(word, pushHistory) {
-    const resultArea = this.containerEl.querySelector("#ed-result-area");
-    if (!resultArea) return;
-    resultArea.innerHTML = renderLoading(word);
-    try {
-      const result = fullLookup(word, {
-        maxSentences: this.plugin.settings.maxSentences
-      });
-      if (result) {
-        this.currentResult = result;
-        this.currentWord = word;
-        resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
-        this.renderChatSuggestions();
-        if (pushHistory) {
-          this.pushNavHistory(word);
-        }
-        if (result.word.lang === "es" && this.plugin.settings.autoPlayAudio) {
-          this.handlePlayAudio(resultArea.querySelector("[data-action='play-audio']"));
-        }
-      } else {
-        this.currentResult = null;
-        this.currentWord = word;
-        resultArea.innerHTML = renderNotFound(word);
-        this.chatSuggestionsContainer.empty();
-        if (pushHistory) {
-          this.pushNavHistory(word);
-        }
-      }
-    } catch (err) {
-      resultArea.innerHTML = renderDbError(
-        err instanceof Error ? err.message : "An error occurred during lookup"
-      );
-    }
-  }
-  async handlePlayAudio(btn) {
-    if (!btn || !this.currentResult) return;
-    const word = btn.dataset.word;
-    if (!word) return;
-    btn.textContent = "\u23F3 Loading...";
-    try {
-      const audioEl = await playAudio(word);
-      if (audioEl) {
-        btn.textContent = "\u{1F50A} Playing";
-        audioEl.addEventListener("ended", () => {
-          btn.textContent = "\u{1F50A} Listen";
-        });
-        audioEl.addEventListener("error", () => {
-          btn.textContent = "\u{1F50A} Listen";
-        });
-      } else {
-        btn.textContent = "\u{1F50A} Listen";
-        new import_obsidian5.Notice("Failed to play audio. Check your internet connection.");
-      }
-    } catch (err) {
-      btn.textContent = "\u{1F50A} Listen";
-      new import_obsidian5.Notice("Failed to load audio.");
-    }
-  }
-  handleWordClick(el) {
-    if (!el) return;
-    const word = el.dataset.lookup;
-    if (!word) return;
-    this.searchInput.value = word;
-    this.hideTypeahead();
-    this.doLookup(word, true);
-  }
-  handleExtLink(el) {
-    if (!el) return;
-    const url = el.dataset.url;
-    const title = el.dataset.title;
-    if (!url) return;
-    if (import_obsidian5.Platform.isMobile) {
-      window.open(url, "_blank");
-      return;
-    }
-    this.plugin.openWebView(url, title);
   }
   toggleChat() {
     this.chatContainer.classList.toggle("ed-hidden");
@@ -3545,12 +3603,32 @@ var DictionaryView = class extends import_obsidian5.ItemView {
   }
   updateChatModelLabel() {
     if (!this.chatModelLabel) return;
-    const model = this.plugin.settings.llmModel || "(no model)";
-    const server = this.plugin.settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
+    const settings = this.settings();
+    const model = settings.llmModel || "(no model)";
+    const server = settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
     this.chatModelLabel.textContent = `Model: ${model} \xB7 ${server}`;
   }
+  clearChat() {
+    this.messages = [];
+    const messagesContainer = this.chatContainer.querySelector("#ed-chat-messages");
+    if (messagesContainer) {
+      messagesContainer.empty();
+    }
+  }
+  /**
+   * Send a chat suggestion (from the suggestion links below definition).
+   * Opens chat if hidden, fills input, and sends.
+   */
+  sendChatSuggestion(text) {
+    if (this.chatContainer.classList.contains("ed-hidden")) {
+      this.toggleChat();
+    }
+    this.chatInput.value = text;
+    this.sendChat();
+  }
+  /** Build context string for the LLM from the current dictionary result */
   buildWordContext() {
-    const result = this.currentResult;
+    const result = this.currentResult();
     if (!result) return "";
     const { word, definitions, sentences } = result;
     const lines = [];
@@ -3572,17 +3650,18 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     }
     return lines.join("\n");
   }
+  /** Render chat suggestion chips for the current word */
   renderChatSuggestions() {
     const container = this.chatSuggestionsContainer;
     if (!container) return;
     container.empty();
-    const result = this.currentResult;
+    const result = this.currentResult();
     if (!result) return;
     const { word } = result;
     const wordStr = word.word;
     const pos = word.pos || "";
     const defs = result.definitions.map((d) => d.definition).join("; ");
-    const templates = this.plugin.settings.chatSuggestions;
+    const templates = this.settings().chatSuggestions;
     const links = [];
     for (const template of templates) {
       if (!template.trim()) continue;
@@ -3600,28 +3679,15 @@ var DictionaryView = class extends import_obsidian5.ItemView {
         text: links[i]
       });
       link.href = "#";
+      const linkText = links[i];
       link.addEventListener("click", (evt) => {
         evt.preventDefault();
-        this.sendChatSuggestion(links[i]);
+        this.sendChatSuggestion(linkText);
       });
     }
   }
-  sendChatSuggestion(text) {
-    if (this.chatContainer.classList.contains("ed-hidden")) {
-      this.toggleChat();
-    }
-    this.chatInput.value = text;
-    this.sendChat();
-  }
-  clearChat() {
-    this.chatMessages = [];
-    const messagesContainer = this.containerEl.querySelector("#ed-chat-messages");
-    if (messagesContainer) {
-      messagesContainer.empty();
-    }
-  }
   navigateChatHistory(direction) {
-    const history = this.plugin.settings.chatPromptHistory;
+    const history = this.settings().chatPromptHistory;
     if (history.length === 0) return;
     if (this.chatHistoryIndex === -1) {
       this.chatInputBeforeHistory = this.chatInput.value;
@@ -3644,7 +3710,7 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       return;
     }
     dropdown.empty();
-    const history = this.plugin.settings.chatPromptHistory;
+    const history = this.settings().chatPromptHistory;
     if (history.length === 0) {
       dropdown.createDiv({ cls: "ed-chat-recents-empty", text: "No prompts yet" });
     } else {
@@ -3662,8 +3728,8 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       clearHistory.textContent = "Clear all prompts";
       clearHistory.addEventListener("click", async (evt) => {
         evt.stopPropagation();
-        this.plugin.settings.chatPromptHistory = [];
-        await this.plugin.saveSettings();
+        this.settings().chatPromptHistory = [];
+        await this.saveSettings();
         dropdown.classList.add("ed-hidden");
       });
     }
@@ -3674,15 +3740,16 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     if (!userText || this.isStreaming) return;
     this.chatInput.value = "";
     this.isStreaming = true;
-    const hist = this.plugin.settings.chatPromptHistory;
+    const settings = this.settings();
+    const hist = settings.chatPromptHistory;
     if (hist[hist.length - 1] !== userText) {
       hist.push(userText);
-      if (hist.length > 100) hist.shift();
-      await this.plugin.saveSettings();
+      if (hist.length > MAX_CHAT_PROMPT_HISTORY) hist.shift();
+      await this.saveSettings();
     }
     this.chatHistoryIndex = -1;
-    this.chatMessages.push({ role: "user", content: userText });
-    const messagesContainer = this.containerEl.querySelector("#ed-chat-messages");
+    this.messages.push({ role: "user", content: userText });
+    const messagesContainer = this.chatContainer.querySelector("#ed-chat-messages");
     if (messagesContainer) {
       const userDiv = document.createElement("div");
       userDiv.className = "ed-chat-msg ed-chat-user";
@@ -3700,19 +3767,20 @@ var DictionaryView = class extends import_obsidian5.ItemView {
     let accumulated = "";
     const wordContext = this.buildWordContext();
     let renderTimeout = null;
+    const chatContainer = this.chatContainer;
     const renderMarkdown = () => {
       const md = accumulated;
       const container = assistantDiv;
       container.empty();
-      import_obsidian5.MarkdownRenderer.render(this.app, md, container, "", this);
+      import_obsidian5.MarkdownRenderer.render(this.app, md, container, "", this.component);
     };
     const debouncedRender = () => {
       if (renderTimeout) clearTimeout(renderTimeout);
-      renderTimeout = setTimeout(renderMarkdown, 80);
+      renderTimeout = setTimeout(renderMarkdown, MARKDOWN_RENDER_DEBOUNCE_MS);
     };
     const response = await streamChatMessage(
-      this.chatMessages,
-      this.plugin.settings,
+      this.messages,
+      this.settings(),
       (text) => {
         accumulated += text;
         assistantDiv.textContent = accumulated;
@@ -3728,175 +3796,292 @@ var DictionaryView = class extends import_obsidian5.ItemView {
       assistantDiv.textContent = `Error: ${response.error}`;
       assistantDiv.classList.add("ed-chat-error");
     } else {
-      this.chatMessages.push({ role: "assistant", content: response.message });
+      this.messages.push({ role: "assistant", content: response.message });
       renderMarkdown();
     }
     this.isStreaming = false;
   }
-  // ============================================================
-  // Navigation history
-  // ============================================================
-  pushNavHistory(word) {
-    if (this.navIndex < this.navHistory.length - 1) {
-      this.navHistory = this.navHistory.slice(0, this.navIndex + 1);
-    }
-    if (this.navHistory.length > 0 && this.navHistory[this.navHistory.length - 1] === word) {
-      return;
-    }
-    this.navHistory.push(word);
-    this.navIndex = this.navHistory.length - 1;
-    this.updateNavButtons();
-    this.saveHistory();
+  /** Hide chat recents dropdown */
+  hideChatRecents() {
+    this.chatRecentsDropdown?.classList.add("ed-hidden");
   }
-  navigateBack() {
-    if (this.navIndex <= 0) return;
-    this.navIndex--;
-    const word = this.navHistory[this.navIndex];
-    this.searchInput.value = word;
-    this.hideTypeahead();
-    this.doLookup(word, false);
-    this.updateNavButtons();
+};
+
+// src/ui/dictionary-view.ts
+var DictionaryView = class extends import_obsidian6.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    // Result state
+    this.currentResult = null;
+    this.currentWord = "";
+    this.plugin = plugin;
+    this.search = new SearchController((word) => this.onSearch(word));
+    this.nav = new NavHistory((word) => this.onNavigate(word));
+    this.chat = new ChatController(
+      this.app,
+      this,
+      () => this.plugin.settings,
+      () => this.plugin.saveSettings(),
+      () => this.currentResult
+    );
   }
-  navigateForward() {
-    if (this.navIndex >= this.navHistory.length - 1) return;
-    this.navIndex++;
-    const word = this.navHistory[this.navIndex];
-    this.searchInput.value = word;
-    this.hideTypeahead();
-    this.doLookup(word, false);
-    this.updateNavButtons();
+  getViewType() {
+    return VIEW_TYPE_DICTIONARY;
   }
-  updateNavButtons() {
-    if (!this.navButtons) return;
-    this.navButtons.back.disabled = this.navIndex <= 0;
-    this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
-    this.recentsBtn.disabled = this.navHistory.length === 0;
+  getDisplayText() {
+    return "Espa\xF1ol Diccionario";
   }
-  // ============================================================
-  // History persistence
-  // ============================================================
-  async loadHistory() {
-    const history = this.plugin.settings.navHistory;
-    if (Array.isArray(history) && history.length > 0) {
-      this.navHistory = history;
-      this.navIndex = history.length - 1;
-      this.updateNavButtons();
-    }
+  getIcon() {
+    return "book-open";
   }
-  async saveHistory() {
-    this.plugin.settings.navHistory = this.navHistory;
-    await this.plugin.saveSettings();
-  }
-  /**
-   * Toggle the recents dropdown.
-   */
-  toggleRecents() {
-    if (this.recentsDropdown.classList.contains("ed-hidden")) {
-      this.showRecents();
+  async onOpen() {
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.classList.add("espanol-diccionario");
+    const searchDiv = container.createDiv({ cls: "ed-search-container" });
+    const navDiv = searchDiv.createDiv({ cls: "ed-nav-buttons" });
+    const navButtons = {
+      back: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-back", attr: { type: "button", title: "Back (Alt+\u2190)" } }),
+      forward: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-forward", attr: { type: "button", title: "Forward (Alt+\u2192)" } })
+    };
+    navButtons.back.setText("\u2190");
+    navButtons.forward.setText("\u2192");
+    navButtons.back.disabled = true;
+    navButtons.forward.disabled = true;
+    const recentsBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-recents-btn", attr: { type: "button", title: "Recent words" } });
+    recentsBtn.setText("\u{1F550}");
+    recentsBtn.disabled = true;
+    const chatToggleBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-chat-toggle-btn", attr: { type: "button", title: "Toggle chat" } });
+    chatToggleBtn.setText("\u{1F4AC}");
+    chatToggleBtn.addEventListener("click", () => this.chat.toggleChat());
+    const recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
+    const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
+    const searchInput = searchForm.createEl("input", {
+      type: "text",
+      cls: "ed-search-input",
+      attr: { placeholder: "Search a word (Spanish or English)...", autocomplete: "off", spellcheck: "false" }
+    });
+    const searchBtn = searchForm.createEl("button", { cls: "ed-search-btn", attr: { type: "submit" } });
+    searchBtn.setText("\u{1F50D}");
+    const typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
+    this.search.init(searchInput, typeaheadList, searchForm);
+    this.nav.init(navButtons, recentsBtn, recentsDropdown);
+    this.nav.loadFromSettings(this.plugin.settings.navHistory);
+    const resultArea = container.createDiv({ cls: "ed-result-area", attr: { id: "ed-result-area" } });
+    this.chatSuggestionsContainer = container.createDiv({ cls: "ed-suggestion-links" });
+    if (!isDatabaseReady()) {
+      resultArea.innerHTML = renderDbLoading();
     } else {
-      this.hideRecents();
+      resultArea.innerHTML = EMPTY_STATE_HTML;
     }
+    const chatSection = container.createDiv({ cls: "ed-chat-section" });
+    const chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
+    const chatToolbar = chatContainer.createDiv({ cls: "ed-chat-toolbar" });
+    const chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
+    const clearBtn = chatToolbar.createEl("button", { cls: "ed-chat-clear-btn", attr: { type: "button", title: "Clear chat" } });
+    clearBtn.setText("\u{1F5D1} Clear");
+    clearBtn.addEventListener("click", () => this.chat.clearChat());
+    const chatMessages = chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
+    const chatForm = chatContainer.createEl("form", { cls: "ed-chat-form" });
+    const chatInput = chatForm.createEl("input", {
+      type: "text",
+      cls: "ed-chat-input",
+      attr: { placeholder: "Ask a question about this word or Spanish grammar..." }
+    });
+    const chatActions = chatForm.createDiv({ cls: "ed-chat-actions" });
+    const chatRecentsBtn = chatActions.createEl("button", {
+      cls: "ed-chat-recents-btn",
+      attr: { type: "button", title: "Prompt history" }
+    });
+    chatRecentsBtn.setText("\u{1F552}");
+    const chatSendBtn = chatActions.createEl("button", { cls: "ed-chat-send-btn", attr: { type: "submit" } });
+    chatSendBtn.setText("Send");
+    const chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
+    this.chat.init(chatContainer, chatInput, chatModelLabel, chatRecentsDropdown, chatToggleBtn, this.chatSuggestionsContainer, chatForm, chatRecentsBtn);
+    this.chat.updateChatModelLabel();
+    container.addEventListener("click", (evt) => {
+      const target = evt.target;
+      if (!target.closest(".ed-recents") && !target.closest(".ed-nav-recents-btn")) {
+        this.nav.hideRecents();
+      }
+      if (!target.closest(".ed-chat-recents-dropdown") && !target.closest(".ed-chat-recents-btn")) {
+        this.chat.hideChatRecents();
+      }
+      if (target.closest("[data-action='play-audio']")) {
+        this.handlePlayAudio(target.closest("[data-action='play-audio']"));
+      } else if (target.closest(".ed-clickable-word")) {
+        this.handleWordClick(target.closest(".ed-clickable-word"));
+      } else if (target.closest(".ed-ext-link")) {
+        this.handleExtLink(target.closest(".ed-ext-link"));
+      } else if (target.closest("[data-action='ask-ai']")) {
+        this.handleAskAi(target.closest("[data-action='ask-ai']"));
+      }
+    });
+    this.containerEl.addEventListener("keydown", (evt) => {
+      if (evt.altKey && evt.key === "ArrowLeft") {
+        evt.preventDefault();
+        this.nav.navigateBack();
+      } else if (evt.altKey && evt.key === "ArrowRight") {
+        evt.preventDefault();
+        this.nav.navigateForward();
+      }
+    });
+    this.search.focus();
   }
-  showRecents() {
-    this.recentsDropdown.empty();
-    const recent = this.navHistory.slice(-20).reverse();
-    if (recent.length === 0) {
-      this.recentsDropdown.createDiv({ cls: "ed-recents-empty", text: "No recent words" });
-    } else {
-      for (const word of recent) {
-        const item = this.recentsDropdown.createDiv({ cls: "ed-recents-item" });
-        item.createSpan({ cls: "ed-recents-word", text: word });
-        if (word === this.currentWord) {
-          item.classList.add("ed-recents-current");
-        }
-        item.addEventListener("click", () => {
-          this.searchInput.value = word;
-          this.hideRecents();
-          this.hideTypeahead();
-          this.doLookup(word, true);
-        });
+  async onClose() {
+    this.search.cleanup();
+  }
+  /** Focus the search input (public, for plugin commands) */
+  focusSearch() {
+    this.search.focus();
+  }
+  /** Update the chat model label (public, called by model-selector) */
+  updateChatModelLabel() {
+    this.chat.updateChatModelLabel();
+  }
+  /** Update the view when database becomes ready */
+  notifyDatabaseReady() {
+    const resultArea = this.containerEl.querySelector("#ed-result-area");
+    if (resultArea) {
+      const emptyState = resultArea.querySelector(".ed-loading");
+      if (emptyState) {
+        resultArea.innerHTML = EMPTY_STATE_HTML;
       }
     }
-    this.recentsDropdown.classList.remove("ed-hidden");
   }
-  hideRecents() {
-    this.recentsDropdown.classList.add("ed-hidden");
+  /** Notify the view of a database error */
+  notifyDatabaseError(error) {
+    const resultArea = this.containerEl.querySelector("#ed-result-area");
+    if (resultArea) {
+      resultArea.innerHTML = renderDbError(error);
+    }
   }
   // ============================================================
-  // Typeahead / autocomplete
+  // Search callbacks (wired to controllers)
   // ============================================================
-  updateTypeahead() {
-    if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);
-    const text = this.searchInput.value.trim();
-    if (text.length < 2) {
-      this.hideTypeahead();
+  /** Called by SearchController when user submits a search or selects typeahead */
+  onSearch(word) {
+    if (!word) {
+      const resultArea = this.containerEl.querySelector("#ed-result-area");
+      if (resultArea) {
+        resultArea.innerHTML = EMPTY_STATE_HTML;
+      }
       return;
     }
-    this.typeaheadTimeout = setTimeout(() => {
-      if (!isDatabaseReady()) return;
-      const results = searchDictionary(text, void 0, 10);
-      const seen = /* @__PURE__ */ new Set();
-      const unique = results.filter((w) => {
-        const key = `${w.word}|${w.pos}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
+    this.doLookup(word, true);
+  }
+  /** Called by NavHistory when navigating back/forward or selecting a recent word */
+  onNavigate(word) {
+    this.search.setSearchText(word);
+    this.search.hideTypeahead();
+    this.doLookup(word, true);
+  }
+  // ============================================================
+  // Core lookup
+  // ============================================================
+  doLookup(word, pushHistory) {
+    const resultArea = this.containerEl.querySelector("#ed-result-area");
+    if (!resultArea) return;
+    resultArea.innerHTML = renderLoading(word);
+    try {
+      const result = fullLookup(word, {
+        maxSentences: this.plugin.settings.maxSentences
       });
-      if (unique.length === 0) {
-        this.hideTypeahead();
-        return;
+      if (result) {
+        this.currentResult = result;
+        this.currentWord = word;
+        resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
+        this.chat.renderChatSuggestions();
+        if (pushHistory) {
+          this.nav.push(word);
+          this.nav.setCurrentWord(word);
+        }
+        if (result.word.lang === "es" && this.plugin.settings.autoPlayAudio) {
+          this.handlePlayAudio(resultArea.querySelector("[data-action='play-audio']"));
+        }
+      } else {
+        this.currentResult = null;
+        this.currentWord = word;
+        const langGuess = /[áéíóúñüÁÉÍÓÚÑÜ]/.test(word) ? "es" : "en";
+        resultArea.innerHTML = renderNotFound(word, langGuess);
+        this.chatSuggestionsContainer.empty();
+        if (pushHistory) {
+          this.nav.push(word);
+          this.nav.setCurrentWord(word);
+        }
       }
-      this.typeaheadItems = unique.map((w) => ({ word: w.word, pos: w.pos || "", lang: w.lang }));
-      this.typeaheadIndex = -1;
-      this.typeaheadList.empty();
-      for (let i = 0; i < this.typeaheadItems.length; i++) {
-        const item = this.typeaheadItems[i];
-        const div = this.typeaheadList.createDiv({ cls: "ed-typeahead-item" });
-        div.createSpan({ cls: "ed-typeahead-word", text: item.word });
-        const meta = div.createSpan({ cls: "ed-typeahead-meta" });
-        if (item.pos) meta.createSpan({ cls: "ed-typeahead-pos", text: item.pos });
-        meta.createSpan({ cls: `ed-typeahead-flag ed-lang-${item.lang}` });
-        div.addEventListener("mousedown", (evt) => {
-          evt.preventDefault();
-          this.selectTypeaheadItem(i);
+    } catch (err) {
+      resultArea.innerHTML = renderDbError(
+        err instanceof Error ? err.message : "An error occurred during lookup"
+      );
+    }
+  }
+  // ============================================================
+  // Click handlers
+  // ============================================================
+  async handlePlayAudio(btn) {
+    if (!btn || !this.currentResult) return;
+    const word = btn.dataset.word;
+    if (!word) return;
+    btn.textContent = "\u23F3 Loading...";
+    try {
+      const audioEl = await playAudio(word);
+      if (audioEl) {
+        btn.textContent = "\u{1F50A} Playing";
+        audioEl.addEventListener("ended", () => {
+          btn.textContent = "\u{1F50A} Listen";
         });
+        audioEl.addEventListener("error", () => {
+          btn.textContent = "\u{1F50A} Listen";
+        });
+      } else {
+        btn.textContent = "\u{1F50A} Listen";
+        new import_obsidian6.Notice("Failed to play audio. Check your internet connection.");
       }
-      this.typeaheadList.classList.remove("ed-hidden");
-    }, 150);
-  }
-  navigateTypeahead(direction) {
-    const items = this.typeaheadList.querySelectorAll(".ed-typeahead-item");
-    if (items.length === 0) return;
-    if (this.typeaheadIndex >= 0 && this.typeaheadIndex < items.length) {
-      items[this.typeaheadIndex].classList.remove("ed-typeahead-active");
-    }
-    this.typeaheadIndex += direction;
-    if (this.typeaheadIndex < 0) this.typeaheadIndex = items.length - 1;
-    if (this.typeaheadIndex >= items.length) this.typeaheadIndex = 0;
-    items[this.typeaheadIndex].classList.add("ed-typeahead-active");
-    const item = this.typeaheadItems[this.typeaheadIndex];
-    if (item) {
-      this.searchInput.value = item.word;
+    } catch (err) {
+      btn.textContent = "\u{1F50A} Listen";
+      new import_obsidian6.Notice("Failed to load audio.");
     }
   }
-  selectTypeaheadItem(index) {
-    const item = this.typeaheadItems[index];
-    if (!item) return;
-    this.searchInput.value = item.word;
-    this.hideTypeahead();
-    this.doSearch();
+  handleWordClick(el) {
+    if (!el) return;
+    const word = el.dataset.lookup;
+    if (!word) return;
+    this.search.setSearchText(word);
+    this.search.hideTypeahead();
+    this.doLookup(word, true);
   }
-  hideTypeahead() {
-    this.typeaheadList.classList.add("ed-hidden");
-    this.typeaheadIndex = -1;
-    this.typeaheadItems = [];
+  handleExtLink(el) {
+    if (!el) return;
+    const url = el.dataset.url;
+    const title = el.dataset.title;
+    if (!url) return;
+    if (import_obsidian6.Platform.isMobile) {
+      window.open(url, "_blank");
+      return;
+    }
+    this.plugin.openWebView(url, title);
+  }
+  /** Handle "Ask AI about this word" click on not-found results */
+  handleAskAi(el) {
+    if (!el) return;
+    const word = el.dataset.word || "";
+    const lang = el.dataset.lang || "";
+    if (!word) return;
+    const settings = this.plugin.settings;
+    if (!settings.llmModel) {
+      new import_obsidian6.Notice("No LLM model configured. Go to Settings \u2192 Espa\xF1ol Diccionario \u2192 LLM Chat to set up a model.");
+      return;
+    }
+    const prompt = settings.notFoundPrompt.replace(/{word}/g, word).replace(/{source}/g, lang === "es" ? "Spanish" : lang === "en" ? "English" : "Spanish").replace(/{target}/g, lang === "es" ? "English" : lang === "en" ? "Spanish" : "Spanish");
+    this.chat.sendChatSuggestion(prompt);
   }
 };
 
 // src/ui/web-view.ts
-var import_obsidian6 = require("obsidian");
-var VIEW_TYPE_WEB = "espanol-diccionario-web";
-var WebView = class extends import_obsidian6.ItemView {
+var import_obsidian7 = require("obsidian");
+var VIEW_TYPE_WEB2 = VIEW_TYPE_WEB;
+var WebView = class extends import_obsidian7.ItemView {
   constructor(leaf) {
     super(leaf);
     this.url = "";
@@ -3904,7 +4089,7 @@ var WebView = class extends import_obsidian6.ItemView {
     this.webviewEl = null;
   }
   getViewType() {
-    return VIEW_TYPE_WEB;
+    return VIEW_TYPE_WEB2;
   }
   getDisplayText() {
     return this.titleText || "Web View";
@@ -3961,20 +4146,31 @@ var WebView = class extends import_obsidian6.ItemView {
       webview.reload();
     });
     openExtBtn.addEventListener("click", () => {
-      window.require("electron").shell.openExternal(url);
+      const electronReq = window.require;
+      if (electronReq) {
+        electronReq("electron").shell.openExternal(url);
+      } else {
+        window.open(url, "_blank");
+      }
     });
     webview.addEventListener("did-navigate", (evt) => {
+      const navEvt = evt;
       try {
-        urlDisplay.setText(new URL(evt.url).hostname);
-        urlDisplay.setAttribute("title", evt.url);
+        if (navEvt.url) {
+          urlDisplay.setText(new URL(navEvt.url).hostname);
+          urlDisplay.setAttribute("title", navEvt.url);
+        }
       } catch {
-        urlDisplay.setText(evt.url);
+        if (navEvt.url) urlDisplay.setText(navEvt.url);
       }
     });
     webview.addEventListener("did-navigate-in-page", (evt) => {
+      const navEvt = evt;
       try {
-        urlDisplay.setText(new URL(evt.url).hostname);
-        urlDisplay.setAttribute("title", evt.url);
+        if (navEvt.url) {
+          urlDisplay.setText(new URL(navEvt.url).hostname);
+          urlDisplay.setAttribute("title", navEvt.url);
+        }
       } catch {
       }
     });
@@ -3988,19 +4184,18 @@ var WebView = class extends import_obsidian6.ItemView {
 };
 
 // src/main.ts
-init_db();
-var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
+var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian8.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
   }
   async onload() {
     await this.loadSettings();
-    this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
+    this.registerView(VIEW_TYPE_DICTIONARY, (leaf) => {
       return new DictionaryView(leaf, this);
     });
-    if (!import_obsidian7.Platform.isMobile) {
-      this.registerView(VIEW_TYPE_WEB, (leaf) => {
+    if (!import_obsidian8.Platform.isMobile) {
+      this.registerView(VIEW_TYPE_WEB2, (leaf) => {
         return new WebView(leaf);
       });
     }
@@ -4021,11 +4216,25 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
     this.initDatabaseAsync();
   }
   onunload() {
-    const { closeDatabase: closeDatabase2 } = (init_db(), __toCommonJS(db_exports));
-    closeDatabase2();
+    closeDatabase();
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = await this.loadData();
+    if (loaded) {
+      this.settings = { ...DEFAULT_SETTINGS };
+      for (const key of Object.keys(DEFAULT_SETTINGS)) {
+        if (key in loaded) {
+          this.settings[key] = loaded[key];
+        }
+      }
+      for (let i = 0; i < 4; i++) {
+        if (!this.settings.chatSuggestions[i]) {
+          this.settings.chatSuggestions[i] = DEFAULT_SETTINGS.chatSuggestions[i];
+        }
+      }
+    } else {
+      this.settings = { ...DEFAULT_SETTINGS };
+    }
   }
   async saveSettings() {
     await this.saveData(this.settings);
@@ -4042,12 +4251,12 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
    */
   async activateView() {
     const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO)[0];
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_DICTIONARY)[0];
     if (!leaf) {
       const newLeaf = workspace.getLeaf("tab");
       if (newLeaf) {
         await newLeaf.setViewState({
-          type: VIEW_TYPE_ESPANOL_DICCIONARIO,
+          type: VIEW_TYPE_DICTIONARY,
           active: true
         });
         leaf = newLeaf;
@@ -4064,12 +4273,12 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
    */
   async openWebView(url, title) {
     const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(VIEW_TYPE_WEB)[0];
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_WEB2)[0];
     if (!leaf) {
       leaf = workspace.getLeaf("tab");
     }
     await leaf.setViewState({
-      type: VIEW_TYPE_WEB,
+      type: VIEW_TYPE_WEB2,
       state: { url, title: title || "Web View" },
       active: true
     });
@@ -4086,7 +4295,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
     try {
       const pluginDir = this.getPluginDir();
       await initDatabase(this.app, pluginDir);
-      const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO);
+      const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_DICTIONARY);
       for (const leaf of leaves) {
         if (leaf.view instanceof DictionaryView) {
           leaf.view.notifyDatabaseReady();
@@ -4094,7 +4303,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
       }
     } catch (err) {
       console.error("[espanol-diccionario] Database init failed:", err);
-      const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO);
+      const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_DICTIONARY);
       for (const leaf of leaves) {
         if (leaf.view instanceof DictionaryView) {
           leaf.view.notifyDatabaseError(
@@ -4102,13 +4311,13 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian7.Plugin {
           );
         }
       }
-      new import_obsidian7.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
+      new import_obsidian8.Notice("Espa\xF1ol Diccionario: Failed to load dictionary. See console for details.");
     }
   }
   /**
    * Get the plugin's data directory path in the vault (relative to vault root)
    */
   getPluginDir() {
-    return ".obsidian/plugins/espanol-diccionario";
+    return `.obsidian/plugins/${PLUGIN_ID}`;
   }
 };

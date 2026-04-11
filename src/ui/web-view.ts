@@ -1,13 +1,31 @@
 // src/ui/web-view.ts — In-Obsidian web viewer for external reference sites
 
 import { ItemView, WorkspaceLeaf } from "obsidian";
+import { VIEW_TYPE_WEB as VIEW_TYPE_WEB_CONST } from "../constants";
 
-export const VIEW_TYPE_WEB = "espanol-diccionario-web";
+export const VIEW_TYPE_WEB = VIEW_TYPE_WEB_CONST;
+
+/**
+ * Minimal type for Electron's webview tag (desktop only).
+ * Only used when Platform.isMobile is false.
+ */
+interface WebviewTag extends HTMLElement {
+	src: string;
+	canGoBack(): boolean;
+	canGoForward(): boolean;
+	goBack(): void;
+	goForward(): void;
+	reload(): void;
+}
+
+interface ElectronRequire {
+	(module: "electron"): { shell: { openExternal: (url: string) => void } };
+}
 
 export class WebView extends ItemView {
 	private url: string = "";
 	private titleText: string = "";
-	private webviewEl: Electron.WebviewTag | null = null;
+	private webviewEl: WebviewTag | null = null;
 
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
@@ -66,7 +84,7 @@ export class WebView extends ItemView {
 		openExtBtn.setText("⤴");
 
 		// Create webview element (Electron-specific, allows cross-origin navigation)
-		const webview = document.createElement("webview") as Electron.WebviewTag;
+		const webview = document.createElement("webview") as WebviewTag;
 		webview.src = url;
 		webview.setAttribute("allowpopups", "true");
 		webview.addClass("ed-webview");
@@ -84,22 +102,33 @@ export class WebView extends ItemView {
 			webview.reload();
 		});
 		openExtBtn.addEventListener("click", () => {
-			(window as any).require("electron").shell.openExternal(url);
+			const electronReq = (window as unknown as { require?: ElectronRequire }).require;
+			if (electronReq) {
+				electronReq("electron").shell.openExternal(url);
+			} else {
+				window.open(url, "_blank");
+			}
 		});
 
 		// Update URL display on navigation
-		webview.addEventListener("did-navigate", (evt: any) => {
+		webview.addEventListener("did-navigate", (evt: Event) => {
+			const navEvt = evt as { url?: string };
 			try {
-				urlDisplay.setText(new URL(evt.url).hostname);
-				urlDisplay.setAttribute("title", evt.url);
+				if (navEvt.url) {
+					urlDisplay.setText(new URL(navEvt.url).hostname);
+					urlDisplay.setAttribute("title", navEvt.url);
+				}
 			} catch {
-				urlDisplay.setText(evt.url);
+				if (navEvt.url) urlDisplay.setText(navEvt.url);
 			}
 		});
-		webview.addEventListener("did-navigate-in-page", (evt: any) => {
+		webview.addEventListener("did-navigate-in-page", (evt: Event) => {
+			const navEvt = evt as { url?: string };
 			try {
-				urlDisplay.setText(new URL(evt.url).hostname);
-				urlDisplay.setAttribute("title", evt.url);
+				if (navEvt.url) {
+					urlDisplay.setText(new URL(navEvt.url).hostname);
+					urlDisplay.setAttribute("title", navEvt.url);
+				}
 			} catch {
 				// ignore
 			}

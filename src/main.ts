@@ -5,7 +5,8 @@ import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, type PluginSettings } 
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
 import { showModelPicker, ModelPickerDialog } from "./ui/model-selector";
-import { initDatabase, isDatabaseReady } from "./dictionary/db";
+import { initDatabase, isDatabaseReady, closeDatabase } from "./dictionary/db";
+import { PLUGIN_ID, VIEW_TYPE_DICTIONARY } from "./constants";
 
 export default class EspañolDiccionarioPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -51,13 +52,27 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 	}
 
 	onunload() {
-		// Clean up database
-		const { closeDatabase } = require("./dictionary/db");
 		closeDatabase();
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const loaded = await this.loadData();
+		if (loaded) {
+			this.settings = { ...DEFAULT_SETTINGS };
+			for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof PluginSettings)[]) {
+				if (key in loaded) {
+					(this.settings as unknown as Record<string, unknown>)[key] = loaded[key];
+				}
+			}
+			// Ensure chatSuggestions tuple has all 4 entries
+			for (let i = 0; i < 4; i++) {
+				if (!this.settings.chatSuggestions[i]) {
+					this.settings.chatSuggestions[i] = DEFAULT_SETTINGS.chatSuggestions[i];
+				}
+			}
+		} else {
+			this.settings = { ...DEFAULT_SETTINGS };
+		}
 	}
 
 	async saveSettings() {
@@ -167,6 +182,6 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 	 * Get the plugin's data directory path in the vault (relative to vault root)
 	 */
 	private getPluginDir(): string {
-		return ".obsidian/plugins/espanol-diccionario";
+		return `.obsidian/plugins/${PLUGIN_ID}`;
 	}
 }

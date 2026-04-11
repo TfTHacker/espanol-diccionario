@@ -1,6 +1,7 @@
 // src/audio/provider.ts — Audio playback using Google TTS (Castilian Spanish)
 
 import type { PluginSettings } from "../settings";
+import { AUDIO_LOAD_TIMEOUT_MS } from "../constants";
 
 /**
  * Get the Google TTS URL for a Spanish word.
@@ -40,7 +41,7 @@ export async function playAudio(word: string): Promise<HTMLAudioElement | null> 
 				clearTimeout(timer);
 			};
 
-			const timer = setTimeout(onTimeout, 8000);
+			const timer = setTimeout(onTimeout, AUDIO_LOAD_TIMEOUT_MS);
 
 			audioEl.addEventListener("canplaythrough", onCanPlay, { once: true });
 			audioEl.addEventListener("error", onError, { once: true });

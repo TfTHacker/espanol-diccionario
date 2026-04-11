@@ -3,22 +3,24 @@
 // Auto-downloads missing files (database + WASM) from GitHub releases on first run
 
 import type { WordEntry, Definition, Sentence, LemmaEntry } from "./data";
-import { requestUrl } from "obsidian";
+import { App, requestUrl } from "obsidian";
 import initSqlJs, { Database } from "sql.js";
+import { GITHUB_RELEASES_BASE } from "../constants";
+import { stripAccents } from "../utils/normalize";
 
 let db: Database | null = null;
 let dbReady = false;
 let initPromise: Promise<void> | null = null;
+let cachedStats: DatabaseStats | null = null;
 
-// GitHub release URL base — update when releasing new versions
-const GITHUB_RELEASES_BASE = "https://github.com/TfTHacker/espanol-diccionario/releases/latest/download";
+const GITHUB_RELEASES_URL = GITHUB_RELEASES_BASE;
 
 /**
  * Initialize the SQLite database: auto-downloads files if missing, then loads into memory.
  * @param app Obsidian App instance
  * @param pluginDir Vault-relative path to plugin directory (e.g., ".obsidian/plugins/espanol-diccionario")
  */
-export async function initDatabase(app: any, pluginDir: string): Promise<void> {
+export async function initDatabase(app: App, pluginDir: string): Promise<void> {
 	if (dbReady) return;
 	if (initPromise) return initPromise;
 
@@ -26,7 +28,7 @@ export async function initDatabase(app: any, pluginDir: string): Promise<void> {
 	return initPromise;
 }
 
-async function _initDatabase(app: any, pluginDir: string): Promise<void> {
+async function _initDatabase(app: App, pluginDir: string): Promise<void> {
 	try {
 		console.log("[español-diccionario] Initializing database...");
 
@@ -36,7 +38,7 @@ async function _initDatabase(app: any, pluginDir: string): Promise<void> {
 
 		if (!dbExists) {
 			console.log("[español-diccionario] dictionary.db not found, downloading...");
-			await downloadFile(app, pluginDir, "dictionary.db", `${GITHUB_RELEASES_BASE}/dictionary.db`);
+			await downloadFile(app, pluginDir, "dictionary.db", `${GITHUB_RELEASES_URL}/dictionary.db`);
 			dbExists = await app.vault.adapter.exists(dbPath);
 			if (!dbExists) {
 				throw new Error("Failed to download dictionary.db. Please check your internet connection or manually place the file in the plugin directory.");
@@ -50,7 +52,7 @@ async function _initDatabase(app: any, pluginDir: string): Promise<void> {
 
 		if (!wasmExists) {
 			console.log("[español-diccionario] sql-wasm.wasm not found, downloading...");
-			await downloadFile(app, pluginDir, "sql-wasm.wasm", `${GITHUB_RELEASES_BASE}/sql-wasm.wasm`);
+			await downloadFile(app, pluginDir, "sql-wasm.wasm", `${GITHUB_RELEASES_URL}/sql-wasm.wasm`);
 			wasmExists = await app.vault.adapter.exists(wasmPath);
 			if (!wasmExists) {
 				throw new Error("Failed to download sql-wasm.wasm. Please check your internet connection.");
@@ -90,7 +92,7 @@ async function _initDatabase(app: any, pluginDir: string): Promise<void> {
  * Download a file from a URL and save it to the plugin directory.
  * Uses requestUrl (Obsidian API) for cross-platform compatibility (works on mobile too).
  */
-async function downloadFile(app: any, pluginDir: string, filename: string, url: string): Promise<void> {
+async function downloadFile(app: App, pluginDir: string, filename: string, url: string): Promise<void> {
 	console.log("[español-diccionario] Downloading", url);
 	const response = await requestUrl({
 		url: url,
@@ -119,7 +121,7 @@ async function downloadFile(app: any, pluginDir: string, filename: string, url: 
  * Load the sql.js WASM binary from the vault.
  * Falls back to CDN if the local file is somehow missing.
  */
-async function loadWasmBinary(app: any, pluginDir: string): Promise<ArrayBuffer> {
+async function loadWasmBinary(app: App, pluginDir: string): Promise<ArrayBuffer> {
 	const wasmPath = `${pluginDir}/sql-wasm.wasm`;
 
 	// Try loading from vault via readBinary
@@ -136,7 +138,8 @@ async function loadWasmBinary(app: any, pluginDir: string): Promise<ArrayBuffer>
 
 	// Try loading via Obsidian's resource path (for desktop)
 	try {
-		const resourcePath = (app as any).vault.adapter.getResourcePath?.(wasmPath);
+		const adapter = app.vault.adapter as unknown as { getResourcePath?: (path: string) => string };
+		const resourcePath = adapter.getResourcePath?.(wasmPath);
 		if (resourcePath) {
 			console.log("[español-diccionario] Loading WASM via resource path:", resourcePath);
 			const response = await fetch(resourcePath);
@@ -164,7 +167,7 @@ export function isDatabaseReady(): boolean {
 /**
  * Get database statistics (word counts, sizes, etc.)
  */
-export function getDatabaseStats(): {
+export interface DatabaseStats {
 	esWords: number;
 	enWords: number;
 	definitions: number;
@@ -172,7 +175,10 @@ export function getDatabaseStats(): {
 	lemmas: number;
 	totalWords: number;
 	dbSizeMB: string;
-} | null {
+}
+
+export function getDatabaseStats(): DatabaseStats | null {
+	if (cachedStats) return cachedStats;
 	if (!dbReady || !db) return null;
 	try {
 		const esWords = db.exec("SELECT COUNT(*) FROM words WHERE lang = 'es'")[0]?.values[0]?.[0] as number ?? 0;
@@ -185,7 +191,7 @@ export function getDatabaseStats(): {
 		const pageCount = db.exec("PRAGMA page_count")[0]?.values[0]?.[0] as number ?? 0;
 		const dbSizeBytes = pageSize * pageCount;
 		const dbSizeMB = dbSizeBytes > 0 ? (dbSizeBytes / 1024 / 1024).toFixed(1) : "unknown";
-		return {
+		cachedStats = {
 			esWords: Number(esWords),
 			enWords: Number(enWords),
 			definitions: Number(definitions),
@@ -194,6 +200,7 @@ export function getDatabaseStats(): {
 			totalWords: Number(esWords) + Number(enWords),
 			dbSizeMB,
 		};
+		return cachedStats;
 	} catch {
 		return null;
 	}
@@ -206,13 +213,14 @@ export function closeDatabase(): void {
 	}
 	dbReady = false;
 	initPromise = null;
+	cachedStats = null;
 }
 
 /**
  * Force re-download of the dictionary database.
  * Deletes the existing DB + WASM files, closes the DB, then re-initializes.
  */
-export async function redownloadDatabase(app: any, pluginDir: string): Promise<void> {
+export async function redownloadDatabase(app: App, pluginDir: string): Promise<void> {
 	console.log("[español-diccionario] Re-downloading database...");
 
 	// Close existing DB first
@@ -239,6 +247,30 @@ export async function redownloadDatabase(app: any, pluginDir: string): Promise<v
 }
 
 /**
+ * Map DB column names (snake_case) to TypeScript property names (camelCase).
+ * sql.js getAsObject() returns DB column names like 'word_id', 'sense_num', etc.
+ * Our TypeScript interfaces use camelCase like 'wordId', 'senseNum'.
+ */
+const COLUMN_MAP: Record<string, string> = {
+	word_id: "wordId",
+	sense_num: "senseNum",
+	sentence_es: "sentenceEs",
+	sentence_en: "sentenceEn",
+};
+
+/**
+ * Convert a row from snake_case DB columns to camelCase TypeScript properties.
+ */
+function toCamelCase(row: Record<string, unknown>): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(row)) {
+		const mapped = COLUMN_MAP[key] ?? key;
+		result[mapped] = value;
+	}
+	return result;
+}
+
+/**
  * Execute a query and return all rows as typed objects
  */
 function queryAll<T extends Record<string, any>>(sql: string, params: any[] = []): T[] {
@@ -251,7 +283,7 @@ function queryAll<T extends Record<string, any>>(sql: string, params: any[] = []
 
 	const results: T[] = [];
 	while (stmt.step()) {
-		const row = stmt.getAsObject();
+		const row = toCamelCase(stmt.getAsObject() as Record<string, unknown>);
 		results.push(row as T);
 	}
 	stmt.free();
@@ -359,6 +391,98 @@ export function lemmatize(word: string, lang: string = "es"): LemmaEntry[] {
 	const normalized = word.toLowerCase().trim();
 	return queryAll<LemmaEntry>(
 		"SELECT * FROM lemmas WHERE inflected = ? AND lang = ?",
+		[normalized, lang]
+	);
+}
+
+// ============================================================
+// Accent-insensitive search
+// ============================================================
+
+/**
+ * Build a SQL expression that strips Spanish diacritics from a column name.
+ * Applied inside WHERE clauses for accent-insensitive matching.
+ *
+ * Maps: á→a, é→e, í→i, ó→o, ú→u, ü→u, ñ→n (and uppercase variants).
+ */
+function sqlStripAccents(column: string): string {
+	return `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${column}, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u'), 'ü', 'u'), 'ñ', 'n'), 'Á', 'A'), 'É', 'E'), 'Í', 'I'), 'Ó', 'O'), 'Ú', 'U'), 'Ü', 'U')`;
+}
+
+/**
+ * Look up a word with accent-insensitive matching.
+ * Strips diacritics from both the search term and stored words,
+ * so "arbol" finds "árbol", "estan" finds "están", etc.
+ *
+ * Uses SQL REPLACE for in-database normalization (acceptable performance
+ * since sql.js runs entirely in-memory).
+ */
+export function lookupWordNormalized(word: string, langHint?: "es" | "en"): WordEntry | null {
+	if (!dbReady || !db) return null;
+	const normalized = stripAccents(word.toLowerCase().trim());
+	if (!normalized) return null;
+
+	const strippedWord = sqlStripAccents("word");
+
+	if (langHint) {
+		const result = queryFirst<WordEntry>(
+			`SELECT * FROM words WHERE ${strippedWord} = ? AND lang = ? ORDER BY frequency ASC LIMIT 1`,
+			[normalized, langHint]
+		);
+		if (result) return result;
+	}
+
+	// Try Spanish first (this is a Spanish dictionary)
+	for (const tryLang of ["es", "en"]) {
+		const result = queryFirst<WordEntry>(
+			`SELECT * FROM words WHERE ${strippedWord} = ? AND lang = ? ORDER BY frequency ASC LIMIT 1`,
+			[normalized, tryLang]
+		);
+		if (result) return result;
+	}
+
+	return null;
+}
+
+/**
+ * Search for words by prefix with accent-insensitive matching.
+ * Strips diacritics from both the prefix and stored words,
+ * so "arb" finds "árbol", "est" finds "están", etc.
+ */
+export function searchWordsNormalized(prefix: string, lang?: "es" | "en", limit = 20): WordEntry[] {
+	if (!dbReady || !db) return [];
+	const normalized = stripAccents(prefix.toLowerCase().trim());
+	if (!normalized) return [];
+
+	const strippedWord = sqlStripAccents("word");
+
+	if (lang) {
+		return queryAll<WordEntry>(
+			`SELECT * FROM words WHERE ${strippedWord} LIKE ? AND lang = ? ORDER BY frequency ASC LIMIT ?`,
+			[normalized + "%", lang, limit]
+		);
+	}
+
+	// No lang hint: show Spanish words first, then English
+	return queryAll<WordEntry>(
+		`SELECT * FROM words WHERE ${strippedWord} LIKE ? ORDER BY CASE WHEN lang = 'es' THEN 0 ELSE 1 END, frequency ASC LIMIT ?`,
+		[normalized + "%", limit]
+	);
+}
+
+/**
+ * Lemmatize a word with accent-insensitive matching.
+ * Strips diacritics from both the inflected form and stored lemma entries,
+ * so "estan" can find the lemma entry for "están".
+ */
+export function lemmatizeNormalized(word: string, lang: string = "es"): LemmaEntry[] {
+	if (!dbReady || !db) return [];
+	const normalized = stripAccents(word.toLowerCase().trim());
+
+	const strippedInflected = sqlStripAccents("inflected");
+
+	return queryAll<LemmaEntry>(
+		`SELECT * FROM lemmas WHERE ${strippedInflected} = ? AND lang = ?`,
 		[normalized, lang]
 	);
 }

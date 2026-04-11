@@ -16,6 +16,7 @@ export interface PluginSettings {
 	navHistory: string[];
 	chatPromptHistory: string[];
 	chatSuggestions: [string, string, string, string];
+	notFoundPrompt: string;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -38,6 +39,7 @@ language the user writes in (English or Spanish).`,
 		"What words are easily confused with \"{word}\"?",
 		"Explain the different meanings of \"{word}\"",
 	],
+	notFoundPrompt: "Translate \"{word}\" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context.",
 };
 
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {
@@ -170,10 +172,26 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 				);
 		}
 
+		// "Not found" prompt
+		new Setting(containerEl)
+			.setName("Prompt when word not found")
+			.setDesc("Use {word} for the searched word, {source} for the detected source language, and {target} for the target language.")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.notFoundPrompt)
+					.setValue(this.plugin.settings.notFoundPrompt)
+					.onChange(async (value) => {
+						this.plugin.settings.notFoundPrompt = value;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 3;
+				text.inputEl.cols = 50;
+			});
+
 		// Reset LLM settings to defaults
 		new Setting(containerEl)
 			.setName("Reset LLM settings")
-			.setDesc("Restore server URL, API key, model, temperature, system prompt, and suggestion prompts to their defaults.")
+			.setDesc("Restore server URL, API key, model, temperature, system prompt, suggestion prompts, and not-found prompt to their defaults.")
 			.addButton((button) =>
 				button
 					.setButtonText("Reset to defaults")
@@ -185,6 +203,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
 						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
 						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
+						this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
 						await this.plugin.saveSettings();
 						this.display();
 					})

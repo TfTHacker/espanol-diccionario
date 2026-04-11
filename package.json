@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
+    "better-sqlite3": "^11.8.0",
     "builtin-modules": "^4.0.0",
     "esbuild": "^0.24.0",
     "obsidian": "latest",
@@ -27,8 +28,6 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.0",
-    "sql.js": "^1.14.1",
-    "wa-sqlite": "^1.0.0"
+    "sql.js": "^1.14.1"
   }
 }

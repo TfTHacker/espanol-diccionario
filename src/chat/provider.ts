@@ -4,6 +4,7 @@
 
 import { requestUrl, Platform } from "obsidian";
 import type { PluginSettings } from "../settings";
+import { OLLAMA_LOCAL_HOSTS } from "../constants";
 
 export interface ChatMessage {
 	role: "system" | "user" | "assistant";
@@ -27,7 +28,7 @@ export interface ChatResponse {
  */
 function buildApiUrl(serverUrl: string): { url: string; isOllama: boolean } {
 	const base = serverUrl.replace(/\/+$/, "");
-	const isOllama = base.includes("localhost:11434") || base.includes("127.0.0.1:11434");
+	const isOllama = OLLAMA_LOCAL_HOSTS.some(h => base.includes(h));
 
 	// If the URL already ends with a full chat/completions path, use as-is
 	if (base.endsWith("/chat/completions") || base.endsWith("/api/chat")) {
@@ -146,7 +147,7 @@ export async function streamChatMessage(
 	wordContext?: string
 ): Promise<ChatResponse> {
 	const { llmServerUrl } = settings;
-	const isLocalOllama = llmServerUrl.includes("localhost:11434") || llmServerUrl.includes("127.0.0.1:11434");
+	const isLocalOllama = OLLAMA_LOCAL_HOSTS.some(h => llmServerUrl.includes(h));
 
 	// Try streaming with fetch only for local Ollama (no CORS issues)
 	if (isLocalOllama && !Platform.isMobile) {

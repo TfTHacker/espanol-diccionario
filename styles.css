@@ -281,6 +281,24 @@
 	color: var(--text-faint);
 }
 
+.ed-not-found-ask-ai {
+	margin-top: 12px;
+}
+
+.ed-ask-ai-link {
+	color: var(--text-accent);
+	cursor: pointer;
+	font-size: 14px;
+	text-decoration: none;
+	border-bottom: 1px dashed var(--text-accent);
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.ed-ask-ai-link:hover {
+	color: var(--text-accent-hover);
+	border-bottom-style: solid;
+}
+
 /* === Chat Section === */
 .ed-chat-section {
 	flex-shrink: 0;
@@ -978,7 +996,8 @@
 	color: var(--text-error);
 }
 
-/* === Chat suggestion chips === *//* === Suggestion links (below definition) === */
+/* === Chat suggestion chips === */
+/* === Suggestion links (below definition) === */
 .ed-suggestion-links {
 	padding: 6px 0 0;
 	font-size: 12px;

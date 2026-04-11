@@ -46,9 +46,9 @@ Open **Settings → Español Diccionario** to configure:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| LLM Server URL | `http://localhost:11434` | OpenAI-compatible API endpoint |
+| LLM Server URL | `https://ollama.com` | OpenAI-compatible API endpoint |
 | API Key | (empty) | Required for cloud providers; optional for local Ollama |
-| Model | `llama3` | Model name as recognized by your server |
+| Model | `gemma3:4b` | Model name as recognized by your server |
 | Temperature | `0.7` | Response creativity (0–1) |
 | System Prompt | (Spanish tutor prompt) | Customizable prompt for chat |
 
@@ -58,7 +58,7 @@ Open **Settings → Español Diccionario** to configure:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Audio source | Wikimedia first | Wikimedia Commons + Google TTS fallback, or Google TTS only |
+| Audio source | Google TTS (es-ES) | Castilian Spanish audio via Google Translate TTS |
 | Auto-play | Off | Auto-play pronunciation on lookup |
 
 ### Display

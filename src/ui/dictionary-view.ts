@@ -1,58 +1,53 @@
 // src/ui/dictionary-view.ts — Main dictionary tab/view
+// Delegates to SearchController, NavHistory, and ChatController
 
-import { ItemView, WorkspaceLeaf, Notice, Platform, MarkdownRenderer } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, Platform } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
-import { fullLookup, searchDictionary } from "../dictionary/lookup";
+import { fullLookup } from "../dictionary/lookup";
 import { isDatabaseReady } from "../dictionary/db";
 import { playAudio } from "../audio/provider";
-import { streamChatMessage } from "../chat/provider";
-import type { ChatMessage } from "../chat/provider";
 import type { DictionaryResult } from "../dictionary/data";
-import { renderResult, renderNotFound, renderLoading, renderDbLoading, renderDbError } from "./result-renderer";
+import { renderResult, renderNotFound, renderLoading, renderDbLoading, renderDbError, EMPTY_STATE_HTML } from "./result-renderer";
+import { VIEW_TYPE_DICTIONARY } from "../constants";
+import { SearchController } from "./search-controller";
+import { NavHistory } from "./nav-history";
+import { ChatController } from "./chat-controller";
 
-export const VIEW_TYPE_ESPANOL_DICCIONARIO = "espanol-diccionario-view";
+export { VIEW_TYPE_DICTIONARY as VIEW_TYPE_ESPANOL_DICCIONARIO } from "../constants";
 
 export class DictionaryView extends ItemView {
 	plugin: EspañolDiccionarioPlugin;
 
-	// Search state
-	private searchInput!: HTMLInputElement;
-	private searchTimeout: ReturnType<typeof setTimeout> | null = null;
-	private typeaheadList!: HTMLElement;
-	private typeaheadTimeout: ReturnType<typeof setTimeout> | null = null;
-	private typeaheadIndex = -1;
-	private typeaheadItems: { word: string; pos: string; lang: string }[] = [];
+	// Delegated controllers
+	private search: SearchController;
+	private nav: NavHistory;
+	private chat: ChatController;
 
 	// Result state
 	private currentResult: DictionaryResult | null = null;
 	private currentWord: string = "";
 
-	// Navigation history
-	private navHistory: string[] = [];
-	private navIndex = -1;
-	private navButtons!: { back: HTMLButtonElement; forward: HTMLButtonElement };
-	private recentsBtn!: HTMLButtonElement;
-	private recentsDropdown!: HTMLElement;
-
-	// Chat state
-	private chatMessages: ChatMessage[] = [];
-	private chatInput!: HTMLInputElement;
-	private chatContainer!: HTMLElement;
-	private chatModelLabel!: HTMLElement;
-	private chatHistoryIndex = -1; // -1 means not navigating history
-	private chatRecentsDropdown!: HTMLElement;
-	private chatInputBeforeHistory = ""; // stores current input when navigating history
-	private chatToggleBtn!: HTMLButtonElement;
+	// UI element references
 	private chatSuggestionsContainer!: HTMLElement;
-	private isStreaming = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
 		super(leaf);
 		this.plugin = plugin;
+
+		// Initialize controllers with callbacks
+		this.search = new SearchController((word) => this.onSearch(word));
+		this.nav = new NavHistory((word) => this.onNavigate(word));
+		this.chat = new ChatController(
+			this.app,
+			this,
+			() => this.plugin.settings,
+			() => this.plugin.saveSettings(),
+			() => this.currentResult,
+		);
 	}
 
 	getViewType(): string {
-		return VIEW_TYPE_ESPANOL_DICCIONARIO;
+		return VIEW_TYPE_DICTIONARY;
 	}
 
 	getDisplayText(): string {
@@ -68,113 +63,48 @@ export class DictionaryView extends ItemView {
 		container.empty();
 		container.classList.add("espanol-diccionario");
 
-		// Search bar with navigation buttons
+		// === Search bar with navigation ===
 		const searchDiv = container.createDiv({ cls: "ed-search-container" });
 
-		// Back/Forward navigation buttons
 		const navDiv = searchDiv.createDiv({ cls: "ed-nav-buttons" });
-		this.navButtons = {
-			back: navDiv.createEl("button", {
-				cls: "ed-nav-btn ed-nav-back",
-				attr: { type: "button", title: "Back (Alt+←)" },
-			}),
-			forward: navDiv.createEl("button", {
-				cls: "ed-nav-btn ed-nav-forward",
-				attr: { type: "button", title: "Forward (Alt+→)" },
-			}),
+		const navButtons = {
+			back: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-back", attr: { type: "button", title: "Back (Alt+←)" } }),
+			forward: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-forward", attr: { type: "button", title: "Forward (Alt+→)" } }),
 		};
-		this.navButtons.back.setText("←");
-		this.navButtons.forward.setText("→");
-		this.navButtons.back.disabled = true;
-		this.navButtons.forward.disabled = true;
-		this.navButtons.back.addEventListener("click", () => this.navigateBack());
-		this.navButtons.forward.addEventListener("click", () => this.navigateForward());
+		navButtons.back.setText("←");
+		navButtons.forward.setText("→");
+		navButtons.back.disabled = true;
+		navButtons.forward.disabled = true;
 
-		// Recent words dropdown button
-		this.recentsBtn = navDiv.createEl("button", {
-			cls: "ed-nav-btn ed-nav-recents-btn",
-			attr: { type: "button", title: "Recent words" },
-		});
-		this.recentsBtn.setText("🕐");
-		this.recentsBtn.disabled = true;
-		this.recentsBtn.addEventListener("click", () => this.toggleRecents());
+		const recentsBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-recents-btn", attr: { type: "button", title: "Recent words" } });
+		recentsBtn.setText("🕐");
+		recentsBtn.disabled = true;
 
-		// Chat toggle button
-		this.chatToggleBtn = navDiv.createEl("button", {
-			cls: "ed-nav-btn ed-chat-toggle-btn",
-			attr: { type: "button", title: "Toggle chat" },
-		});
-		this.chatToggleBtn.setText("💬");
-		this.chatToggleBtn.addEventListener("click", () => this.toggleChat());
+		const chatToggleBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-chat-toggle-btn", attr: { type: "button", title: "Toggle chat" } });
+		chatToggleBtn.setText("💬");
+		chatToggleBtn.addEventListener("click", () => this.chat.toggleChat());
 
-		// Recents dropdown
-		this.recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
+		const recentsDropdown = searchDiv.createDiv({ cls: "ed-recents ed-hidden" });
 
 		const searchForm = searchDiv.createEl("form", { cls: "ed-search-form" });
-
-		this.searchInput = searchForm.createEl("input", {
+		const searchInput = searchForm.createEl("input", {
 			type: "text",
 			cls: "ed-search-input",
-			attr: {
-				placeholder: "Search a word (Spanish or English)...",
-				autocomplete: "off",
-				spellcheck: "false",
-			},
+			attr: { placeholder: "Search a word (Spanish or English)...", autocomplete: "off", spellcheck: "false" },
 		});
-
-		const searchBtn = searchForm.createEl("button", {
-			cls: "ed-search-btn",
-			attr: { type: "submit" },
-		});
+		const searchBtn = searchForm.createEl("button", { cls: "ed-search-btn", attr: { type: "submit" } });
 		searchBtn.setText("🔍");
 
-		searchForm.addEventListener("submit", (evt) => {
-			evt.preventDefault();
-			this.hideRecents();
-			this.doSearch();
-		});
+		const typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
 
-		// Typeahead dropdown
-		this.typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
+		// Initialize SearchController
+		this.search.init(searchInput, typeaheadList, searchForm);
 
-		// Keyboard navigation for typeahead
-		this.searchInput.addEventListener("keydown", (evt) => {
-			if (!this.typeaheadList.classList.contains("ed-hidden")) {
-				if (evt.key === "ArrowDown") {
-					evt.preventDefault();
-					this.navigateTypeahead(1);
-					return;
-				}
-				if (evt.key === "ArrowUp") {
-					evt.preventDefault();
-					this.navigateTypeahead(-1);
-					return;
-				}
-				if (evt.key === "Enter" && this.typeaheadIndex >= 0) {
-					evt.preventDefault();
-					this.selectTypeaheadItem(this.typeaheadIndex);
-					return;
-				}
-				if (evt.key === "Escape") {
-					this.hideTypeahead();
-					return;
-				}
-			}
-		});
+		// Initialize NavHistory
+		this.nav.init(navButtons, recentsBtn, recentsDropdown);
+		this.nav.loadFromSettings(this.plugin.settings.navHistory);
 
-		// Hide typeahead when clicking outside
-		this.searchInput.addEventListener("blur", () => {
-			setTimeout(() => this.hideTypeahead(), 200);
-		});
-
-		// Typeahead / autocomplete on input
-		this.searchInput.addEventListener("input", () => {
-			if (this.searchTimeout) clearTimeout(this.searchTimeout);
-			this.searchTimeout = setTimeout(() => this.doSearch(), 300);
-			this.updateTypeahead();
-		});
-
-		// Result area
+		// === Result area ===
 		const resultArea = container.createDiv({ cls: "ed-result-area", attr: { id: "ed-result-area" } });
 
 		// Suggestion links (below definition)
@@ -184,45 +114,27 @@ export class DictionaryView extends ItemView {
 		if (!isDatabaseReady()) {
 			resultArea.innerHTML = renderDbLoading();
 		} else {
-			resultArea.innerHTML = `<div class="ed-empty-state">
-				<div class="ed-empty-icon">📖</div>
-				<div class="ed-empty-text">Type a word above to look it up</div>
-				<div class="ed-empty-hint">Supports Spanish ↔ English, including conjugated forms</div>
-			</div>`;
+			resultArea.innerHTML = EMPTY_STATE_HTML;
 		}
 
-		// Chat area
+		// === Chat area ===
 		const chatSection = container.createDiv({ cls: "ed-chat-section" });
-
-		this.chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
+		const chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-hidden" });
 
 		// Model label + clear button toolbar
-		const chatToolbar = this.chatContainer.createDiv({ cls: "ed-chat-toolbar" });
-		this.chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
-		const clearBtn = chatToolbar.createEl("button", {
-			cls: "ed-chat-clear-btn",
-			attr: { type: "button", title: "Clear chat" },
-		});
+		const chatToolbar = chatContainer.createDiv({ cls: "ed-chat-toolbar" });
+		const chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
+		const clearBtn = chatToolbar.createEl("button", { cls: "ed-chat-clear-btn", attr: { type: "button", title: "Clear chat" } });
 		clearBtn.setText("\u{1F5D1} Clear");
-		clearBtn.addEventListener("click", () => this.clearChat());
+		clearBtn.addEventListener("click", () => this.chat.clearChat());
 
-		const chatMessages = this.chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
+		const chatMessages = chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
 
-		const chatForm = this.chatContainer.createEl("form", { cls: "ed-chat-form" });
-		this.chatInput = chatForm.createEl("input", {
+		const chatForm = chatContainer.createEl("form", { cls: "ed-chat-form" });
+		const chatInput = chatForm.createEl("input", {
 			type: "text",
 			cls: "ed-chat-input",
-			attr: {
-				placeholder: "Ask a question about this word or Spanish grammar...",
-			},
-		});
-
-		// Arrow key navigation for prompt history
-		this.chatInput.addEventListener("keydown", (evt) => {
-			if (evt.key === "ArrowUp" || evt.key === "ArrowDown") {
-				evt.preventDefault();
-				this.navigateChatHistory(evt.key === "ArrowUp" ? -1 : 1);
-			}
+			attr: { placeholder: "Ask a question about this word or Spanish grammar..." },
 		});
 
 		const chatActions = chatForm.createDiv({ cls: "ed-chat-actions" });
@@ -231,33 +143,28 @@ export class DictionaryView extends ItemView {
 			attr: { type: "button", title: "Prompt history" },
 		});
 		chatRecentsBtn.setText("\u{1F552}");
-		chatRecentsBtn.addEventListener("click", (evt) => {
-			evt.stopPropagation();
-			this.toggleChatRecents();
-		});
-		const chatSendBtn = chatActions.createEl("button", {
-			cls: "ed-chat-send-btn",
-			attr: { type: "submit" },
-		});
+
+		const chatSendBtn = chatActions.createEl("button", { cls: "ed-chat-send-btn", attr: { type: "submit" } });
 		chatSendBtn.setText("Send");
 
-		// Chat prompt history dropdown (positioned relative to chatSection, not clipped by chatContainer)
-		this.chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
+		// Chat recents dropdown (in chatSection, not chatContainer, to avoid clipping)
+		const chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
 
-		chatForm.addEventListener("submit", (evt) => {
-			evt.preventDefault();
-			this.sendChat();
-		});
+		// Initialize ChatController
+		this.chat.init(chatContainer, chatInput, chatModelLabel, chatRecentsDropdown, chatToggleBtn, this.chatSuggestionsContainer, chatForm, chatRecentsBtn);
 
-		// Delegated click handler for audio buttons, clickable words, and recents
+		// Update chat model label
+		this.chat.updateChatModelLabel();
+
+		// === Delegated click handler ===
 		container.addEventListener("click", (evt) => {
 			const target = evt.target as HTMLElement;
 			// Close recents if clicking outside the dropdown
 			if (!target.closest(".ed-recents") && !target.closest(".ed-nav-recents-btn")) {
-				this.hideRecents();
+				this.nav.hideRecents();
 			}
 			if (!target.closest(".ed-chat-recents-dropdown") && !target.closest(".ed-chat-recents-btn")) {
-				this.chatRecentsDropdown?.classList.add("ed-hidden");
+				this.chat.hideChatRecents();
 			}
 			if (target.closest("[data-action='play-audio']")) {
 				this.handlePlayAudio(target.closest("[data-action='play-audio']") as HTMLElement);
@@ -265,63 +172,52 @@ export class DictionaryView extends ItemView {
 				this.handleWordClick(target.closest(".ed-clickable-word") as HTMLElement);
 			} else if (target.closest(".ed-ext-link")) {
 				this.handleExtLink(target.closest(".ed-ext-link") as HTMLElement);
+			} else if (target.closest("[data-action='ask-ai']")) {
+				this.handleAskAi(target.closest("[data-action='ask-ai']") as HTMLElement);
 			}
 		});
-
-		// Focus search input
-		this.searchInput.focus();
-
-		// Restore navigation history from persisted storage
-		this.loadHistory();
-
-		// Update model label
-		this.updateChatModelLabel();
 
 		// Global keyboard shortcut for back/forward navigation
 		this.containerEl.addEventListener("keydown", (evt: KeyboardEvent) => {
 			if (evt.altKey && evt.key === "ArrowLeft") {
 				evt.preventDefault();
-				this.navigateBack();
+				this.nav.navigateBack();
 			} else if (evt.altKey && evt.key === "ArrowRight") {
 				evt.preventDefault();
-				this.navigateForward();
+				this.nav.navigateForward();
 			}
 		});
+
+		// Focus search input
+		this.search.focus();
 	}
 
 	async onClose() {
-		// Clean up
+		this.search.cleanup();
 	}
 
-	/**
-	 * Focus the search input
-	 */
+	/** Focus the search input (public, for plugin commands) */
 	public focusSearch() {
-		if (this.searchInput) {
-			this.searchInput.focus();
-		}
+		this.search.focus();
 	}
 
-	/**
-	 * Update the view when database becomes ready
-	 */
+	/** Update the chat model label (public, called by model-selector) */
+	public updateChatModelLabel() {
+		this.chat.updateChatModelLabel();
+	}
+
+	/** Update the view when database becomes ready */
 	public notifyDatabaseReady() {
 		const resultArea = this.containerEl.querySelector("#ed-result-area");
 		if (resultArea) {
 			const emptyState = resultArea.querySelector(".ed-loading");
 			if (emptyState) {
-				resultArea.innerHTML = `<div class="ed-empty-state">
-					<div class="ed-empty-icon">📖</div>
-					<div class="ed-empty-text">Type a word above to look it up</div>
-					<div class="ed-empty-hint">Supports Spanish ↔ English, including conjugated forms</div>
-				</div>`;
+				resultArea.innerHTML = EMPTY_STATE_HTML;
 			}
 		}
 	}
 
-	/**
-	 * Notify the view of a database error
-	 */
+	/** Notify the view of a database error */
 	public notifyDatabaseError(error: string) {
 		const resultArea = this.containerEl.querySelector("#ed-result-area");
 		if (resultArea) {
@@ -329,25 +225,33 @@ export class DictionaryView extends ItemView {
 		}
 	}
 
-	private doSearch() {
-		const word = this.searchInput.value.trim();
+	// ============================================================
+	// Search callbacks (wired to controllers)
+	// ============================================================
+
+	/** Called by SearchController when user submits a search or selects typeahead */
+	private onSearch(word: string) {
 		if (!word) {
 			const resultArea = this.containerEl.querySelector("#ed-result-area");
 			if (resultArea) {
-				resultArea.innerHTML = `<div class="ed-empty-state">
-					<div class="ed-empty-icon">📖</div>
-					<div class="ed-empty-text">Type a word above to look it up</div>
-				</div>`;
+				resultArea.innerHTML = EMPTY_STATE_HTML;
 			}
 			return;
 		}
-
 		this.doLookup(word, true);
 	}
 
-	/**
-	 * Core lookup logic. pushHistory=true when user initiates search (not from navigation)
-	 */
+	/** Called by NavHistory when navigating back/forward or selecting a recent word */
+	private onNavigate(word: string) {
+		this.search.setSearchText(word);
+		this.search.hideTypeahead();
+		this.doLookup(word, true);
+	}
+
+	// ============================================================
+	// Core lookup
+	// ============================================================
+
 	private doLookup(word: string, pushHistory: boolean) {
 		const resultArea = this.containerEl.querySelector("#ed-result-area");
 		if (!resultArea) return;
@@ -365,10 +269,11 @@ export class DictionaryView extends ItemView {
 				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
 
 				// Update chat suggestion chips for this word
-				this.renderChatSuggestions();
+				this.chat.renderChatSuggestions();
 
 				if (pushHistory) {
-					this.pushNavHistory(word);
+					this.nav.push(word);
+					this.nav.setCurrentWord(word);
 				}
 
 				// Auto-play audio for Spanish words
@@ -378,10 +283,13 @@ export class DictionaryView extends ItemView {
 			} else {
 				this.currentResult = null;
 				this.currentWord = word;
-				resultArea.innerHTML = renderNotFound(word);
+				// Best-guess language detection for the not-found prompt
+				const langGuess = /[áéíóúñüÁÉÍÓÚÑÜ]/.test(word) ? "es" : "en";
+				resultArea.innerHTML = renderNotFound(word, langGuess);
 				this.chatSuggestionsContainer.empty();
 				if (pushHistory) {
-					this.pushNavHistory(word);
+					this.nav.push(word);
+					this.nav.setCurrentWord(word);
 				}
 			}
 		} catch (err) {
@@ -390,6 +298,10 @@ export class DictionaryView extends ItemView {
 			);
 		}
 	}
+
+	// ============================================================
+	// Click handlers
+	// ============================================================
 
 	private async handlePlayAudio(btn: HTMLElement | null) {
 		if (!btn || !this.currentResult) return;
@@ -424,9 +336,8 @@ export class DictionaryView extends ItemView {
 		const word = el.dataset.lookup;
 		if (!word) return;
 
-		// Update the search input and trigger lookup
-		this.searchInput.value = word;
-		this.hideTypeahead();
+		this.search.setSearchText(word);
+		this.search.hideTypeahead();
 		this.doLookup(word, true);
 	}
 
@@ -445,466 +356,26 @@ export class DictionaryView extends ItemView {
 		this.plugin.openWebView(url, title);
 	}
 
-	private toggleChat() {
-		this.chatContainer.classList.toggle("ed-hidden");
-		const isHidden = this.chatContainer.classList.contains("ed-hidden");
-		if (this.chatToggleBtn) {
-			this.chatToggleBtn.classList.toggle("ed-nav-btn-active", !isHidden);
-		}
-		if (!isHidden) {
-			this.updateChatModelLabel();
-			this.chatInput.focus();
-		}
-	}
+	/** Handle "Ask AI about this word" click on not-found results */
+	private handleAskAi(el: HTMLElement | null) {
+		if (!el) return;
+		const word = el.dataset.word || "";
+		const lang = el.dataset.lang || "";
+		if (!word) return;
 
-	private updateChatModelLabel() {
-		if (!this.chatModelLabel) return;
-		const model = this.plugin.settings.llmModel || "(no model)";
-		const server = this.plugin.settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
-		this.chatModelLabel.textContent = `Model: ${model} · ${server}`;
-	}
-
-	private buildWordContext(): string {
-		const result = this.currentResult;
-		if (!result) return "";
-
-		const { word, definitions, sentences } = result;
-		const lines: string[] = [];
-		lines.push(`The user is currently looking up: "${word.word}" (${word.lang === "es" ? "Spanish" : "English"}${word.pos ? ", " + word.pos : ""}).`);
-
-		if (definitions.length > 0) {
-			lines.push("Definitions:");
-			for (const d of definitions) {
-				lines.push(`  ${d.senseNum ?? "•"}. ${d.definition}${d.context ? " (" + d.context + ")" : ""}`);
-			}
-		}
-
-		if (sentences.length > 0) {
-			lines.push("Example sentences:");
-			for (const s of sentences.slice(0, 3)) {
-				lines.push(`  \u2022 ${s.sentenceEs || ""}${s.sentenceEn ? " = " + s.sentenceEn : ""}`);
-			}
-		}
-
-		if (result.resolvedFrom) {
-			lines.push(`(Resolved from inflected form: "${result.resolvedFrom}")`);
-		}
-
-		return lines.join("\n");
-	}
-
-	private renderChatSuggestions() {
-		const container = this.chatSuggestionsContainer;
-		if (!container) return;
-		container.empty();
-
-		const result = this.currentResult;
-		if (!result) return;
-
-		const { word } = result;
-		const wordStr = word.word;
-		const pos = word.pos || "";
-		const defs = result.definitions.map(d => d.definition).join("; ");
-
-		const templates = this.plugin.settings.chatSuggestions;
-		const links: string[] = [];
-
-		for (const template of templates) {
-			if (!template.trim()) continue;
-			const text = template
-				.replace(/{word}/g, wordStr)
-				.replace(/{pos}/g, pos)
-				.replace(/{defs}/g, defs);
-			links.push(text);
-		}
-
-		if (links.length === 0) return;
-
-		container.createEl("span", { cls: "ed-suggestion-label", text: "Ask:" });
-
-		for (let i = 0; i < links.length; i++) {
-			if (i > 0) {
-				container.createEl("span", { cls: "ed-suggestion-sep", text: " · " });
-			}
-			const link = container.createEl("a", {
-				cls: "ed-suggestion-link",
-				text: links[i],
-			});
-			link.href = "#";
-			link.addEventListener("click", (evt) => {
-				evt.preventDefault();
-				this.sendChatSuggestion(links[i]);
-			});
-		}
-	}
-
-	private sendChatSuggestion(text: string) {
-		// Open chat if hidden
-		if (this.chatContainer.classList.contains("ed-hidden")) {
-			this.toggleChat();
-		}
-		// Set input and send
-		this.chatInput.value = text;
-		this.sendChat();
-	}
-
-	private clearChat() {
-		this.chatMessages = [];
-		const messagesContainer = this.containerEl.querySelector("#ed-chat-messages");
-		if (messagesContainer) {
-			messagesContainer.empty();
-		}
-	}
-
-	private navigateChatHistory(direction: -1 | 1) {
-		const history = this.plugin.settings.chatPromptHistory;
-		if (history.length === 0) return;
-
-		if (this.chatHistoryIndex === -1) {
-			// Save current input before navigating
-			this.chatInputBeforeHistory = this.chatInput.value;
-		}
-
-		const newIndex = this.chatHistoryIndex === -1
-			? (direction === -1 ? history.length - 1 : -1)
-			: this.chatHistoryIndex + direction;
-
-		if (newIndex < 0 || newIndex >= history.length) {
-			// Went past bounds — restore original input
-			this.chatHistoryIndex = -1;
-			this.chatInput.value = this.chatInputBeforeHistory;
-		} else {
-			this.chatHistoryIndex = newIndex;
-			this.chatInput.value = history[newIndex];
-		}
-
-		// Move cursor to end
-		this.chatInput.focus();
-		this.chatInput.setSelectionRange(this.chatInput.value.length, this.chatInput.value.length);
-	}
-
-	private toggleChatRecents() {
-		const dropdown = this.chatRecentsDropdown;
-		if (!dropdown.classList.contains("ed-hidden")) {
-			dropdown.classList.add("ed-hidden");
+		// Check if LLM is configured
+		const settings = this.plugin.settings;
+		if (!settings.llmModel) {
+			new Notice("No LLM model configured. Go to Settings → Español Diccionario → LLM Chat to set up a model.");
 			return;
 		}
 
-		// Render the prompt history list
-		dropdown.empty();
-		const history = this.plugin.settings.chatPromptHistory;
+		// Build the prompt from settings template
+		const prompt = settings.notFoundPrompt
+			.replace(/{word}/g, word)
+			.replace(/{source}/g, lang === "es" ? "Spanish" : lang === "en" ? "English" : "Spanish")
+			.replace(/{target}/g, lang === "es" ? "English" : lang === "en" ? "Spanish" : "Spanish");
 
-		if (history.length === 0) {
-			dropdown.createDiv({ cls: "ed-chat-recents-empty", text: "No prompts yet" });
-		} else {
-			// Show most recent first
-			for (let i = history.length - 1; i >= 0; i--) {
-				const item = dropdown.createDiv({ cls: "ed-chat-recents-item" });
-				item.textContent = history[i];
-				item.addEventListener("click", (evt) => {
-					evt.stopPropagation();
-					this.chatInput.value = history[i];
-					this.chatInput.focus();
-					dropdown.classList.add("ed-hidden");
-				});
-			}
-
-			// Clear all button
-			const clearHistory = dropdown.createDiv({ cls: "ed-chat-recents-clear" });
-			clearHistory.textContent = "Clear all prompts";
-			clearHistory.addEventListener("click", async (evt) => {
-				evt.stopPropagation();
-				this.plugin.settings.chatPromptHistory = [];
-				await this.plugin.saveSettings();
-				dropdown.classList.add("ed-hidden");
-			});
-		}
-
-		dropdown.classList.remove("ed-hidden");
-	}
-
-	private async sendChat() {
-		const userText = this.chatInput.value.trim();
-		if (!userText || this.isStreaming) return;
-
-		this.chatInput.value = "";
-		this.isStreaming = true;
-
-		// Save to prompt history (avoid duplicates at top)
-		const hist = this.plugin.settings.chatPromptHistory;
-		if (hist[hist.length - 1] !== userText) {
-			hist.push(userText);
-			if (hist.length > 100) hist.shift(); // cap at 100
-			await this.plugin.saveSettings();
-		}
-		this.chatHistoryIndex = -1; // reset navigation
-
-		// Add user message
-		this.chatMessages.push({ role: "user", content: userText });
-
-		// Render user message
-		const messagesContainer = this.containerEl.querySelector("#ed-chat-messages");
-		if (messagesContainer) {
-			const userDiv = document.createElement("div");
-			userDiv.className = "ed-chat-msg ed-chat-user";
-			userDiv.textContent = userText;
-			messagesContainer.appendChild(userDiv);
-		}
-
-		// Create assistant message container
-		const assistantDiv = document.createElement("div");
-		assistantDiv.className = "ed-chat-msg ed-chat-assistant";
-		assistantDiv.textContent = "Thinking...";
-		messagesContainer?.appendChild(assistantDiv);
-
-		// Scroll to bottom
-		if (messagesContainer) {
-			messagesContainer.scrollTop = messagesContainer.scrollHeight;
-		}
-
-		// Stream response
-		assistantDiv.textContent = "";
-		let accumulated = "";
-		const wordContext = this.buildWordContext();
-		let renderTimeout: ReturnType<typeof setTimeout> | null = null;
-
-		const renderMarkdown = () => {
-			const md = accumulated;
-			const container = assistantDiv;
-			container.empty();
-			MarkdownRenderer.render(this.app, md, container, "", this);
-		};
-
-		const debouncedRender = () => {
-			if (renderTimeout) clearTimeout(renderTimeout);
-			renderTimeout = setTimeout(renderMarkdown, 80);
-			};
-
-		const response = await streamChatMessage(
-			this.chatMessages,
-			this.plugin.settings,
-			(text) => {
-				accumulated += text;
-				assistantDiv.textContent = accumulated;
-				if (messagesContainer) {
-					messagesContainer.scrollTop = messagesContainer.scrollHeight;
-				}
-				debouncedRender();
-			},
-			wordContext
-		);
-
-		// Clear any pending render
-		if (renderTimeout) clearTimeout(renderTimeout);
-
-		if (response.error) {
-			assistantDiv.textContent = `Error: ${response.error}`;
-			assistantDiv.classList.add("ed-chat-error");
-		} else {
-			this.chatMessages.push({ role: "assistant", content: response.message });
-			// Final markdown render
-			renderMarkdown();
-		}
-
-		this.isStreaming = false;
-	}
-
-	// ============================================================
-	// Navigation history
-	// ============================================================
-
-	private pushNavHistory(word: string) {
-		// Truncate any forward history
-		if (this.navIndex < this.navHistory.length - 1) {
-			this.navHistory = this.navHistory.slice(0, this.navIndex + 1);
-		}
-
-		// Don't push duplicate of current entry
-		if (this.navHistory.length > 0 && this.navHistory[this.navHistory.length - 1] === word) {
-			return;
-		}
-
-		this.navHistory.push(word);
-		this.navIndex = this.navHistory.length - 1;
-		this.updateNavButtons();
-		this.saveHistory();
-	}
-
-	private navigateBack() {
-		if (this.navIndex <= 0) return;
-		this.navIndex--;
-		const word = this.navHistory[this.navIndex];
-		this.searchInput.value = word;
-		this.hideTypeahead();
-		this.doLookup(word, false);
-		this.updateNavButtons();
-	}
-
-	private navigateForward() {
-		if (this.navIndex >= this.navHistory.length - 1) return;
-		this.navIndex++;
-		const word = this.navHistory[this.navIndex];
-		this.searchInput.value = word;
-		this.hideTypeahead();
-		this.doLookup(word, false);
-		this.updateNavButtons();
-	}
-
-	private updateNavButtons() {
-		if (!this.navButtons) return;
-		this.navButtons.back.disabled = this.navIndex <= 0;
-		this.navButtons.forward.disabled = this.navIndex >= this.navHistory.length - 1;
-		this.recentsBtn.disabled = this.navHistory.length === 0;
-	}
-
-	// ============================================================
-	// History persistence
-	// ============================================================
-
-	private async loadHistory() {
-		const history = this.plugin.settings.navHistory;
-		if (Array.isArray(history) && history.length > 0) {
-			this.navHistory = history;
-			this.navIndex = history.length - 1;
-			this.updateNavButtons();
-		}
-	}
-
-	private async saveHistory() {
-		this.plugin.settings.navHistory = this.navHistory;
-		await this.plugin.saveSettings();
-	}
-
-	/**
-	 * Toggle the recents dropdown.
-	 */
-	private toggleRecents() {
-		if (this.recentsDropdown.classList.contains("ed-hidden")) {
-			this.showRecents();
-		} else {
-			this.hideRecents();
-		}
-	}
-
-	private showRecents() {
-		this.recentsDropdown.empty();
-		// Show last 20 words, most recent first
-		const recent = this.navHistory.slice(-20).reverse();
-		if (recent.length === 0) {
-			this.recentsDropdown.createDiv({ cls: "ed-recents-empty", text: "No recent words" });
-		} else {
-			for (const word of recent) {
-				const item = this.recentsDropdown.createDiv({ cls: "ed-recents-item" });
-				item.createSpan({ cls: "ed-recents-word", text: word });
-				// Highlight current word
-				if (word === this.currentWord) {
-					item.classList.add("ed-recents-current");
-				}
-				item.addEventListener("click", () => {
-					this.searchInput.value = word;
-					this.hideRecents();
-					this.hideTypeahead();
-					this.doLookup(word, true);
-				});
-			}
-		}
-		this.recentsDropdown.classList.remove("ed-hidden");
-	}
-
-	private hideRecents() {
-		this.recentsDropdown.classList.add("ed-hidden");
-	}
-
-	// ============================================================
-	// Typeahead / autocomplete
-	// ============================================================
-
-	private updateTypeahead() {
-		if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);
-
-		const text = this.searchInput.value.trim();
-		if (text.length < 2) {
-			this.hideTypeahead();
-			return;
-		}
-
-		// Debounce: wait 150ms before querying
-		this.typeaheadTimeout = setTimeout(() => {
-			if (!isDatabaseReady()) return;
-
-			const results = searchDictionary(text, undefined, 10);
-			// Deduplicate by word+pos
-			const seen = new Set<string>();
-			const unique = results.filter(w => {
-				const key = `${w.word}|${w.pos}`;
-				if (seen.has(key)) return false;
-				seen.add(key);
-				return true;
-			});
-			if (unique.length === 0) {
-				this.hideTypeahead();
-				return;
-			}
-
-			this.typeaheadItems = unique.map(w => ({ word: w.word, pos: w.pos || "", lang: w.lang }));
-			this.typeaheadIndex = -1;
-
-			this.typeaheadList.empty();
-			for (let i = 0; i < this.typeaheadItems.length; i++) {
-				const item = this.typeaheadItems[i];
-				const div = this.typeaheadList.createDiv({ cls: "ed-typeahead-item" });
-				div.createSpan({ cls: "ed-typeahead-word", text: item.word });
-
-				const meta = div.createSpan({ cls: "ed-typeahead-meta" });
-				if (item.pos) meta.createSpan({ cls: "ed-typeahead-pos", text: item.pos });
-				meta.createSpan({ cls: `ed-typeahead-flag ed-lang-${item.lang}` });
-
-				div.addEventListener("mousedown", (evt) => {
-					evt.preventDefault();
-					this.selectTypeaheadItem(i);
-				});
-			}
-
-			this.typeaheadList.classList.remove("ed-hidden");
-		}, 150);
-	}
-
-	private navigateTypeahead(direction: number) {
-		const items = this.typeaheadList.querySelectorAll(".ed-typeahead-item");
-		if (items.length === 0) return;
-
-		// Remove highlight from current
-		if (this.typeaheadIndex >= 0 && this.typeaheadIndex < items.length) {
-			items[this.typeaheadIndex].classList.remove("ed-typeahead-active");
-		}
-
-		// Move index
-		this.typeaheadIndex += direction;
-		if (this.typeaheadIndex < 0) this.typeaheadIndex = items.length - 1;
-		if (this.typeaheadIndex >= items.length) this.typeaheadIndex = 0;
-
-		// Apply highlight
-		items[this.typeaheadIndex].classList.add("ed-typeahead-active");
-
-		// Update input value preview
-		const item = this.typeaheadItems[this.typeaheadIndex];
-		if (item) {
-			this.searchInput.value = item.word;
-		}
-	}
-
-	private selectTypeaheadItem(index: number) {
-		const item = this.typeaheadItems[index];
-		if (!item) return;
-
-		this.searchInput.value = item.word;
-		this.hideTypeahead();
-		this.doSearch();
-	}
-
-	private hideTypeahead() {
-		this.typeaheadList.classList.add("ed-hidden");
-		this.typeaheadIndex = -1;
-		this.typeaheadItems = [];
+		this.chat.sendChatSuggestion(prompt);
 	}
 }

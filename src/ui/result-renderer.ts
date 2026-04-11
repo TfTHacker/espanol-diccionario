@@ -1,7 +1,14 @@
 // src/ui/result-renderer.ts — Rendering dictionary results to HTML
 // Words in definitions and sentences are clickable for drill-down lookup
 
-import type { DictionaryResult } from "../dictionary/data";
+import type { DictionaryResult, Definition, Sentence } from "../dictionary/data";
+
+/** Shared empty state HTML — used by dictionary-view in multiple places */
+export const EMPTY_STATE_HTML = `<div class="ed-empty-state">
+	<div class="ed-empty-icon">📖</div>
+	<div class="ed-empty-text">Type a word above to look it up</div>
+	<div class="ed-empty-hint">Supports Spanish ↔ English, including conjugated forms</div>
+</div>`;
 
 /**
  * Render a full dictionary result into HTML
@@ -115,9 +122,9 @@ function renderExternalLinks(word: string, lang: string): string {
  * For Spanish entries: definitions are in English → English words clickable (reverse lookup)
  * For English entries: definitions are Spanish words → Spanish words clickable (drill down)
  */
-function renderDefinitions(definitions: any[], lang: string): string {
+function renderDefinitions(definitions: Definition[], lang: string): string {
 	const items = definitions.map((def, i) => {
-		const num = def.sense_num || (i + 1);
+		const num = def.senseNum || (i + 1);
 		const defHtml = lang === "en"
 			? makeReverseDefClickable(def.definition)
 			: makeEnglishDefClickable(def.definition);
@@ -186,14 +193,14 @@ function makeEnglishDefClickable(text: string): string {
  * Render example sentences
  * Spanish words in sentences are clickable
  */
-function renderSentences(sentences: any[]): string {
+function renderSentences(sentences: Sentence[]): string {
 	const items = sentences.map((s) => {
 		let html = "";
-		if (s.sentence_es) {
-			html += `<div class="ed-sentence-es">${makeSentenceClickable(s.sentence_es, "es")}</div>`;
+		if (s.sentenceEs) {
+			html += `<div class="ed-sentence-es">${makeSentenceClickable(s.sentenceEs, "es")}</div>`;
 		}
-		if (s.sentence_en) {
-			html += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentence_en, "en")}</div>`;
+		if (s.sentenceEn) {
+			html += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentenceEn, "en")}</div>`;
 		}
 		return `<li class="ed-sentence-item">${html}</li>`;
 	}).join("");
@@ -226,7 +233,8 @@ function makeSentenceClickable(sentence: string, lang: string): string {
 }
 
 /**
- * Render "not found" message
+ * Render "not found" message with an "Ask AI about this word" link.
+ * The link has data attributes with the word and language for click handling.
  */
 export function renderNotFound(word: string, lang?: string): string {
 	const langLabel = lang === "es" ? "Spanish" : lang === "en" ? "English" : "";
@@ -234,6 +242,7 @@ export function renderNotFound(word: string, lang?: string): string {
 		<div class="ed-not-found-word">${escapeHtml(word)}</div>
 		<div class="ed-not-found-msg">${langLabel ? `${langLabel} word` : "Word"} not found in the dictionary.</div>
 		<div class="ed-not-found-hint">Try a different spelling or the dictionary form (infinitive for verbs, singular for nouns).</div>
+		<div class="ed-not-found-ask-ai"><a class="ed-ask-ai-link" data-action="ask-ai" data-word="${escapeHtml(word)}" data-lang="${escapeHtml(lang || "")}" role="button" tabindex="0">💬 Ask AI about this word</a></div>
 	</div>`;
 }
 
