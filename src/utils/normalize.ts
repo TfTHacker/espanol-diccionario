@@ -31,11 +31,3 @@ export function stripAccents(text: string): string {
 		.replace(/Ü/g, "U")
 		.replace(/Ñ/g, "N");
 }
-
-/**
- * Check if a string contains any Spanish accented characters.
- * Used to determine whether accent-insensitive search is needed.
- */
-export function hasAccents(text: string): boolean {
-	return /[áéíóúüñÁÉÍÓÚÜÑ]/.test(text);
-}

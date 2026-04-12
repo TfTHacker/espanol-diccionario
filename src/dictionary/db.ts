@@ -273,7 +273,7 @@ function toCamelCase(row: Record<string, unknown>): Record<string, unknown> {
 /**
  * Execute a query and return all rows as typed objects
  */
-function queryAll<T extends Record<string, any>>(sql: string, params: any[] = []): T[] {
+function queryAll<T extends object>(sql: string, params: unknown[] = []): T[] {
 	if (!db) return [];
 
 	const stmt = db.prepare(sql);
@@ -293,7 +293,7 @@ function queryAll<T extends Record<string, any>>(sql: string, params: any[] = []
 /**
  * Execute a query and return the first row, or null
  */
-function queryFirst<T extends Record<string, any>>(sql: string, params: any[] = []): T | null {
+function queryFirst<T extends object>(sql: string, params: unknown[] = []): T | null {
 	const results = queryAll<T>(sql, params);
 	return results.length > 0 ? results[0] : null;
 }

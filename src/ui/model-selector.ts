@@ -8,6 +8,24 @@ interface ModelInfo {
 	owned_by?: string;
 }
 
+interface OllamaTagModel {
+	name?: string;
+	model?: string;
+}
+
+interface OllamaTagsResponse {
+	models?: OllamaTagModel[];
+}
+
+interface OpenAiModel {
+	id?: string;
+	owned_by?: string;
+}
+
+interface OpenAiModelsResponse {
+	data?: OpenAiModel[];
+}
+
 /**
  * Fetch available models from the LLM server and show a picker UI
  * inside the given container element.
@@ -137,21 +155,25 @@ async function fetchModels(serverUrl: string, apiKey: string): Promise<ModelInfo
 		headers,
 	});
 
-	const data = response.json;
+	const data = response.json as OllamaTagsResponse | OpenAiModelsResponse;
 	let models: ModelInfo[] = [];
 
-	if (isLocalOllama && data.models) {
+	if (isLocalOllama && Array.isArray((data as OllamaTagsResponse).models)) {
 		// Local Ollama /api/tags format
-		models = data.models.map((m: any) => ({
-			id: m.name || m.model,
-			owned_by: "ollama",
-		}));
-	} else if (data.data && Array.isArray(data.data)) {
+		for (const model of (data as OllamaTagsResponse).models ?? []) {
+			const id = model.name || model.model;
+			if (!id) continue;
+			models.push({ id, owned_by: "ollama" });
+		}
+	} else if (Array.isArray((data as OpenAiModelsResponse).data)) {
 		// OpenAI /v1/models format
-		models = data.data.map((m: any) => ({
-			id: m.id,
-			owned_by: m.owned_by || "",
-		}));
+		for (const model of (data as OpenAiModelsResponse).data ?? []) {
+			if (!model.id) continue;
+			models.push({
+				id: model.id,
+				owned_by: model.owned_by || "",
+			});
+		}
 	}
 
 	models.sort((a, b) => a.id.localeCompare(b.id));
