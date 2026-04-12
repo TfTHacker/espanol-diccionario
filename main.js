@@ -2658,7 +2658,7 @@ language the user writes in (English or Spanish).`,
     'What words are easily confused with "{word}"?',
     'Explain the different meanings of "{word}"'
   ],
-  notFoundPrompt: 'Translate "{word}" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context.'
+  notFoundPrompt: 'Translate "{word}" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context. Use Castilian Spanish'
 };
 var Espa\u00F1olDiccionarioSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
@@ -3837,7 +3837,7 @@ var DictionaryView = class extends import_obsidian6.ItemView {
     return "Espa\xF1ol Diccionario";
   }
   getIcon() {
-    return "book-open";
+    return "languages";
   }
   async onOpen() {
     const container = this.containerEl.children[1];
@@ -3938,6 +3938,13 @@ var DictionaryView = class extends import_obsidian6.ItemView {
   }
   /** Focus the search input (public, for plugin commands) */
   focusSearch() {
+    this.search.focus();
+  }
+  /** Open the dictionary and look up a word (public, for URI handler / links) */
+  lookupWord(word) {
+    this.search.setSearchText(word);
+    this.search.hideTypeahead();
+    this.doLookup(word, true);
     this.search.focus();
   }
   /** Update the chat model label (public, called by model-selector) */
@@ -4204,7 +4211,7 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian8.Plugin {
         return new WebView(leaf);
       });
     }
-    this.addRibbonIcon("book-open", "Espa\xF1ol Diccionario", () => {
+    this.addRibbonIcon("languages", "Espa\xF1ol Diccionario", () => {
       this.activateView();
     });
     this.addCommand({
@@ -4217,6 +4224,12 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian8.Plugin {
       name: "Change LLM model",
       callback: () => this.openModelPicker()
     });
+    this.addCommand({
+      id: "insert-dictionary-link",
+      name: "Insert dictionary link",
+      callback: () => this.insertDictionaryLink()
+    });
+    this.registerObsidianProtocolHandler("espanol-diccionario", (params) => this.handleProtocol(params));
     this.addSettingTab(new Espa\u00F1olDiccionarioSettingTab(this.app, this));
     this.initDatabaseAsync();
   }
@@ -4250,6 +4263,64 @@ var Espa\u00F1olDiccionarioPlugin = class extends import_obsidian8.Plugin {
   async openModelPicker() {
     const modal = new ModelPickerDialog(this.app, this);
     modal.open();
+  }
+  /**
+   * Handle obsidian://espanol-diccionario URIs
+   * Supports: obsidian://espanol-diccionario?word=casa
+   */
+  async handleProtocol(params) {
+    const word = params.word?.trim();
+    if (word) {
+      await this.activateViewWithWord(word);
+    } else {
+      await this.activateView();
+    }
+  }
+  /**
+   * Open or focus the dictionary view and look up a word
+   */
+  async activateViewWithWord(word) {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_DICTIONARY)[0];
+    if (!leaf) {
+      const newLeaf = workspace.getLeaf("tab");
+      if (newLeaf) {
+        await newLeaf.setViewState({
+          type: VIEW_TYPE_DICTIONARY,
+          active: true
+        });
+        leaf = newLeaf;
+      }
+    } else {
+      workspace.revealLeaf(leaf);
+    }
+    if (leaf && leaf.view instanceof DictionaryView) {
+      leaf.view.lookupWord(word);
+    }
+  }
+  /**
+   * Insert a dictionary link at the cursor in the active editor
+   */
+  insertDictionaryLink() {
+    const activeLeaf = this.app.workspace.activeLeaf;
+    if (!activeLeaf) return;
+    const view = activeLeaf.view;
+    if (!(view instanceof import_obsidian8.MarkdownView)) {
+      new import_obsidian8.Notice("Please open a Markdown file to insert a dictionary link.");
+      return;
+    }
+    const editor = view.editor;
+    if (!editor) return;
+    const cursor = editor.getCursor();
+    const selected = editor.getSelection();
+    const word = selected || "";
+    if (word) {
+      const link = `[\u{1F520} ${word}](obsidian://espanol-diccionario?word=${encodeURIComponent(word)})`;
+      editor.replaceSelection(link);
+    } else {
+      const link = "[\u{1F520} Espa\xF1ol Diccionario](obsidian://espanol-diccionario)";
+      editor.replaceRange(link, cursor);
+    }
   }
   /**
    * Open or focus the dictionary view

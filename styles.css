@@ -72,6 +72,11 @@
 	min-height: 0;
 }
 
+/* Mobile: add bottom padding so content isn't hidden behind the bottom ribbon */
+.is-mobile .ed-result-area {
+	padding-bottom: 60px;
+}
+
 /* === Empty / Loading States === */
 .ed-empty-state,
 .ed-loading,

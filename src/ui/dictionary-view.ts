@@ -55,7 +55,7 @@ export class DictionaryView extends ItemView {
 	}
 
 	getIcon(): string {
-		return "book-open";
+		return "languages";
 	}
 
 	async onOpen() {
@@ -198,6 +198,14 @@ export class DictionaryView extends ItemView {
 
 	/** Focus the search input (public, for plugin commands) */
 	public focusSearch() {
+		this.search.focus();
+	}
+
+	/** Open the dictionary and look up a word (public, for URI handler / links) */
+	public lookupWord(word: string) {
+		this.search.setSearchText(word);
+		this.search.hideTypeahead();
+		this.doLookup(word, true);
 		this.search.focus();
 	}
 

@@ -1,6 +1,6 @@
 // src/main.ts — Plugin entry, registration, lifecycle
 
-import { Plugin, Platform, Notice } from "obsidian";
+import { Plugin, Platform, Notice, MarkdownView, type ObsidianProtocolData } from "obsidian";
 import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
@@ -27,7 +27,7 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		}
 
 		// Add ribbon icon
-		this.addRibbonIcon("book-open", "Español Diccionario", () => {
+		this.addRibbonIcon("languages", "Español Diccionario", () => {
 			this.activateView();
 		});
 
@@ -43,6 +43,15 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			name: "Change LLM model",
 			callback: () => this.openModelPicker(),
 		});
+
+		this.addCommand({
+			id: "insert-dictionary-link",
+			name: "Insert dictionary link",
+			callback: () => this.insertDictionaryLink(),
+		});
+
+		// URI handler: obsidian://espanol-diccionario?word=casa
+		this.registerObsidianProtocolHandler("espanol-diccionario", (params) => this.handleProtocol(params));
 
 		// Settings tab
 		this.addSettingTab(new EspañolDiccionarioSettingTab(this.app, this));
@@ -86,6 +95,76 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		// Create a temporary dialog
 		const modal = new ModelPickerDialog(this.app, this);
 		modal.open();
+	}
+
+	/**
+	 * Handle obsidian://espanol-diccionario URIs
+	 * Supports: obsidian://espanol-diccionario?word=casa
+	 */
+	private async handleProtocol(params: ObsidianProtocolData) {
+		const word = params.word?.trim();
+		if (word) {
+			await this.activateViewWithWord(word);
+		} else {
+			await this.activateView();
+		}
+	}
+
+	/**
+	 * Open or focus the dictionary view and look up a word
+	 */
+	private async activateViewWithWord(word: string) {
+		const { workspace } = this.app;
+
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_ESPANOL_DICCIONARIO)[0];
+
+		if (!leaf) {
+			const newLeaf = workspace.getLeaf("tab");
+			if (newLeaf) {
+				await newLeaf.setViewState({
+					type: VIEW_TYPE_ESPANOL_DICCIONARIO,
+					active: true,
+				});
+				leaf = newLeaf;
+			}
+		} else {
+			workspace.revealLeaf(leaf);
+		}
+
+		if (leaf && leaf.view instanceof DictionaryView) {
+			leaf.view.lookupWord(word);
+		}
+	}
+
+	/**
+	 * Insert a dictionary link at the cursor in the active editor
+	 */
+	private insertDictionaryLink() {
+		const activeLeaf = this.app.workspace.activeLeaf;
+		if (!activeLeaf) return;
+
+		const view = activeLeaf.view;
+		if (!(view instanceof MarkdownView)) {
+			new Notice("Please open a Markdown file to insert a dictionary link.");
+			return;
+		}
+
+		const editor = view.editor;
+		if (!editor) return;
+
+		const cursor = editor.getCursor();
+		const selected = editor.getSelection();
+		const word = selected || "";
+
+		if (word) {
+			// Insert link for selected word
+			const link = `[🔠 ${word}](obsidian://espanol-diccionario?word=${encodeURIComponent(word)})`;
+			editor.replaceSelection(link);
+		} else {
+			// Insert generic dictionary link
+			const link = "[🔠 Español Diccionario](obsidian://espanol-diccionario)";
+			editor.replaceRange(link, cursor);
+		}
 	}
 
 	/**

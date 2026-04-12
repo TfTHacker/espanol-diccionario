@@ -39,7 +39,7 @@ language the user writes in (English or Spanish).`,
 		"What words are easily confused with \"{word}\"?",
 		"Explain the different meanings of \"{word}\"",
 	],
-	notFoundPrompt: "Translate \"{word}\" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context.",
+	notFoundPrompt: "Translate \"{word}\" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context. Use Castilian Spanish",
 };
 
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {
