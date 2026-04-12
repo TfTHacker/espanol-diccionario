@@ -124,4 +124,4 @@ gh release view <tag> --json tagName,name,assets,url
 
 - Current release workflow supports both auto tag releases and manual reruns.
 - `dictionary.db` was bootstrapped into release `0.1.1` manually, after which automated reuse became possible.
-- GitHub may show a warning about some Actions using Node 20 internally; this did not block releases during setup.
+- GitHub may show a warning about some Actions targeting Node 20 internally (`actions/checkout@v4`, `actions/setup-node@v4`). The workflow already mitigates this by forcing JavaScript actions onto Node 24 and running build steps on Node 24. The remaining warning is informational until upstream action versions officially target Node 24.
