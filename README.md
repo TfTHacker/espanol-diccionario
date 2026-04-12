@@ -107,6 +107,10 @@ npm run build        # Production build
 npm run build:db     # Build the full dictionary database
 ```
 
+## Releasing
+
+For maintainer release workflow details, versioning steps, and GitHub Actions behavior, see [`RELEASING.md`](RELEASING.md).
+
 ## License
 
 MIT
