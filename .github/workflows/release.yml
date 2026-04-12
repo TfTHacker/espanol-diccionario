@@ -37,16 +37,21 @@ jobs:
       - name: Build plugin
         run: npm run build
 
+      - name: Download dictionary database
+        run: |
+          mkdir -p data
+          curl -fL --retry 3 --retry-delay 2 \
+            "https://github.com/TfTHacker/espanol-diccionario/releases/latest/download/dictionary.db" \
+            -o data/dictionary.db
+          ls -lh data/dictionary.db
+
       - name: Prepare release assets
         run: |
           mkdir -p release
           cp main.js release/main.js
           cp manifest.json release/manifest.json
           cp styles.css release/styles.css
-
-          if [ -f data/dictionary.db ]; then
-            cp data/dictionary.db release/dictionary.db
-          fi
+          cp data/dictionary.db release/dictionary.db
 
           if [ -f node_modules/sql.js/dist/sql-wasm.wasm ]; then
             cp node_modules/sql.js/dist/sql-wasm.wasm release/sql-wasm.wasm
