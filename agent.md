@@ -16,31 +16,37 @@
 
 ```
 src/
-├── main.ts                    # Plugin entry (170 lines): registration, DB init, view lifecycle
-├── settings.ts                # Settings tab & PluginSettings (270 lines)
-├── constants.ts               # Shared constants: plugin IDs, timeouts, limits, URLs
+├── main.ts                    # Plugin entry: registration, commands, protocol handler, DB init
+├── settings.ts                # Settings tab UI + PluginSettings defaults
+├── constants.ts               # Shared constants: plugin IDs, limits, URLs, debounce timings
 ├── dictionary/
 │   ├── data.ts                # Type interfaces (WordEntry, Definition, Sentence, etc.)
-│   ├── db.ts                  # SQLite via sql.js WASM, auto-download, queries (363 lines)
-│   ├── lookup.ts              # fullLookup(), searchDictionary() — core search (60 lines)
+│   ├── db.ts                  # SQLite via sql.js WASM, auto-download, queries, normalized lookup helpers
+│   └── lookup.ts              # fullLookup(), searchDictionary() — high-level lookup orchestration
 ├── audio/
-│   └── provider.ts            # Google TTS audio playback (es-ES locale only)
+│   └── provider.ts            # Google TTS audio playback (es-ES locale)
 ├── chat/
-│   ├── provider.ts            # sendChatMessage(), streamChatMessage() — OpenAI-compat API (310 lines)
-│   └── prompts.ts             # DEFAULT_SYSTEM_PROMPT constant only
-└── ui/
-    ├── dictionary-view.ts     # Main view (900 lines): search, nav, chat, suggestions, typeahead
-    ├── result-renderer.ts      # renderResult(), renderNotFound(), etc. — HTML generation (276 lines)
-    ├── model-selector.ts       # showModelPicker() + ModelPickerDialog (155 lines)
-    └── web-view.ts             # Electron <webview> for external links (desktop only, 115 lines)
+│   ├── provider.ts            # OpenAI-compatible chat + streaming helpers
+│   └── prompts.ts             # Legacy/default prompt constant; currently not wired into runtime settings flow
+├── ui/
+│   ├── dictionary-view.ts     # Main dictionary view and event wiring
+│   ├── chat-controller.ts     # Chat panel behavior and markdown rendering
+│   ├── search-controller.ts   # Search input + typeahead behavior
+│   ├── nav-history.ts         # Back/forward/recent navigation state
+│   ├── result-renderer.ts     # HTML rendering for results, empty/error states, links
+│   ├── model-selector.ts      # showModelPicker() + ModelPickerDialog
+│   └── web-view.ts            # Electron <webview> for external links (desktop only)
+├── utils/
+│   └── normalize.ts           # Accent stripping helpers
+└── typings.d.ts               # Local sql.js typings
 ```
 
 **Database files** (auto-downloaded from GitHub Releases):
-- `dictionary.db` — 172MB SQLite with 284K ES words, 25K EN words, 388K definitions, 1.7M lemmas
+- `dictionary.db` — large SQLite dictionary database, distributed as a release asset
 - `sql-wasm.wasm` — sql.js WASM binary
 
-**Build:** `node esbuild.config.mjs production` → `main.js` + `styles.css`
-**Deploy:** Copy to `.obsidian/plugins/espanol-diccionario/`, then `obsidian plugin:reload`
+**Build:** `node esbuild.config.mjs production` → generates `main.js`
+**Deploy/runtime assets:** `main.js`, `manifest.json`, `styles.css`, `sql-wasm.wasm`, and `dictionary.db`
 
 **Generated artifact note:** `main.js` is release/build output and should not be committed to the repository. Build it locally or in CI when needed.
 **Release workflow:** Read `RELEASING.md` before doing any version bump, tagging, release, or GitHub Actions release recovery work.
@@ -60,7 +66,7 @@ src/
 | Static Obsidian imports | Dynamic `import("obsidian")` crashes on Mac. Must use static `import { requestUrl }` |
 | Chat uses `MarkdownRenderer.render()` | LLM returns markdown — rendered with Obsidian's built-in renderer |
 | External links: `<webview>` on desktop | Electron `<webview>` tag for in-Obsidian browsing; `window.open()` on mobile |
-| `navHistory` in PluginSettings | Previously stored via separate `loadData()`/`saveData()` which got overwritten by `saveSettings()` |
+| `navHistory` in PluginSettings | Present in the settings schema and loaded into the UI navigation controller; persistence wiring should be verified before relying on it for long-term saved history |
 | Constants in `constants.ts` | All magic numbers, strings, and URLs defined in one place for easy maintenance |
 | Accent-insensitive search | 4-step lookup: exact → accent-fold → lemmatize → accent-fold-lemmatize. Typeahead also accent-folded. `ñ→n` included so English keyboards can find "mañana" by typing "manana" |
 

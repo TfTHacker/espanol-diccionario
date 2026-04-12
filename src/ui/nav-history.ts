@@ -16,9 +16,11 @@ export class NavHistory {
 
 	// Callback to trigger a lookup (without pushing to history again)
 	private onNavigate: (word: string) => void;
+	private onChange?: (history: string[]) => void;
 
-	constructor(onNavigate: (word: string) => void) {
+	constructor(onNavigate: (word: string) => void, onChange?: (history: string[]) => void) {
 		this.onNavigate = onNavigate;
+		this.onChange = onChange;
 	}
 
 	/** Initialize UI element references (called once from onOpen) */
@@ -39,15 +41,14 @@ export class NavHistory {
 	/** Load persisted history from plugin settings */
 	loadFromSettings(savedHistory: string[]) {
 		if (Array.isArray(savedHistory) && savedHistory.length > 0) {
-			this.history = savedHistory;
+			this.history = [...savedHistory];
 			this.index = savedHistory.length - 1;
 			this.updateNavButtons();
 		}
 	}
 
-	/** Get history for persistence */
-	getHistory(): string[] {
-		return this.history;
+	private notifyChange() {
+		this.onChange?.([...this.history]);
 	}
 
 	/** Update the "current word" tracker (for recents highlighting) */
@@ -70,6 +71,7 @@ export class NavHistory {
 		this.history.push(word);
 		this.index = this.history.length - 1;
 		this.updateNavButtons();
+		this.notifyChange();
 	}
 
 	navigateBack() {

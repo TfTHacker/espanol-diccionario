@@ -1,8 +1,7 @@
 // src/ui/model-selector.ts — Model selector for settings & command palette
 
-import { App, Modal, Notice, requestUrl } from "obsidian";
+import { App, Modal, requestUrl } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
-import type { PluginSettings } from "../settings";
 
 interface ModelInfo {
 	id: string;

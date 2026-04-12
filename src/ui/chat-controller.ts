@@ -1,6 +1,6 @@
 // src/ui/chat-controller.ts — Chat UI logic for DictionaryView
 
-import { Notice, MarkdownRenderer, Component } from "obsidian";
+import { MarkdownRenderer, Component } from "obsidian";
 import { streamChatMessage } from "../chat/provider";
 import type { ChatMessage } from "../chat/provider";
 import type { DictionaryResult } from "../dictionary/data";
@@ -313,7 +313,6 @@ export class ChatController {
 		const wordContext = this.buildWordContext();
 		let renderTimeout: ReturnType<typeof setTimeout> | null = null;
 
-		const chatContainer = this.chatContainer;
 		const renderMarkdown = () => {
 			const md = accumulated;
 			const container = assistantDiv;

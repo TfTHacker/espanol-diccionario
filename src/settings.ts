@@ -42,6 +42,15 @@ language the user writes in (English or Spanish).`,
 	notFoundPrompt: "Translate \"{word}\" from {source} to {target}. Provide the translation, part of speech, and 3 example sentences using the word in context. Use Castilian Spanish",
 };
 
+export function cloneDefaultSettings(): PluginSettings {
+	return {
+		...DEFAULT_SETTINGS,
+		navHistory: [...DEFAULT_SETTINGS.navHistory],
+		chatPromptHistory: [...DEFAULT_SETTINGS.chatPromptHistory],
+		chatSuggestions: [...DEFAULT_SETTINGS.chatSuggestions],
+	};
+}
+
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 	plugin: EspañolDiccionarioPlugin;
 

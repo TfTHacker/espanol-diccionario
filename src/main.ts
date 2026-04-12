@@ -1,15 +1,15 @@
 // src/main.ts — Plugin entry, registration, lifecycle
 
 import { Plugin, Platform, Notice, MarkdownView, type ObsidianProtocolData } from "obsidian";
-import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, type PluginSettings } from "./settings";
+import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, cloneDefaultSettings, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
-import { showModelPicker, ModelPickerDialog } from "./ui/model-selector";
-import { initDatabase, isDatabaseReady, closeDatabase } from "./dictionary/db";
-import { PLUGIN_ID, VIEW_TYPE_DICTIONARY } from "./constants";
+import { ModelPickerDialog } from "./ui/model-selector";
+import { initDatabase, closeDatabase } from "./dictionary/db";
+import { PLUGIN_ID } from "./constants";
 
 export default class EspañolDiccionarioPlugin extends Plugin {
-	settings: PluginSettings = DEFAULT_SETTINGS;
+	settings: PluginSettings = cloneDefaultSettings();
 
 	async onload() {
 		await this.loadSettings();
@@ -66,21 +66,25 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 
 	async loadSettings() {
 		const loaded = await this.loadData();
-		if (loaded) {
-			this.settings = { ...DEFAULT_SETTINGS };
-			for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof PluginSettings)[]) {
-				if (key in loaded) {
-					(this.settings as unknown as Record<string, unknown>)[key] = loaded[key];
-				}
+		this.settings = cloneDefaultSettings();
+
+		if (!loaded) return;
+
+		for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof PluginSettings)[]) {
+			if (key in loaded) {
+				(this.settings as unknown as Record<string, unknown>)[key] = loaded[key];
 			}
-			// Ensure chatSuggestions tuple has all 4 entries
+		}
+
+		this.settings.navHistory = Array.isArray(this.settings.navHistory) ? [...this.settings.navHistory] : [];
+		this.settings.chatPromptHistory = Array.isArray(this.settings.chatPromptHistory) ? [...this.settings.chatPromptHistory] : [];
+		this.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions] as PluginSettings["chatSuggestions"];
+		if (Array.isArray(loaded.chatSuggestions)) {
 			for (let i = 0; i < 4; i++) {
-				if (!this.settings.chatSuggestions[i]) {
-					this.settings.chatSuggestions[i] = DEFAULT_SETTINGS.chatSuggestions[i];
+				if (typeof loaded.chatSuggestions[i] === "string") {
+					this.settings.chatSuggestions[i] = loaded.chatSuggestions[i];
 				}
 			}
-		} else {
-			this.settings = { ...DEFAULT_SETTINGS };
 		}
 	}
 

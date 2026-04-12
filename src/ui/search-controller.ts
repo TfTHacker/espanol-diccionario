@@ -2,7 +2,7 @@
 
 import { isDatabaseReady } from "../dictionary/db";
 import { searchDictionary } from "../dictionary/lookup";
-import { TYPEAHEAD_DEBOUNCE_MS, SEARCH_DEBOUNCE_MS, MAX_TYPEAHEAD_RESULTS } from "../constants";
+import { TYPEAHEAD_DEBOUNCE_MS, MAX_TYPEAHEAD_RESULTS } from "../constants";
 
 export interface TypeaheadItem {
 	word: string;
@@ -20,7 +20,6 @@ export class SearchController {
 	private typeaheadTimeout: ReturnType<typeof setTimeout> | null = null;
 	private typeaheadIndex = -1;
 	private typeaheadItems: TypeaheadItem[] = [];
-	private searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Callbacks
 	private onSearch: (word: string) => void;
@@ -72,8 +71,6 @@ export class SearchController {
 
 		// Typeahead / autocomplete on input
 		this.searchInput.addEventListener("input", () => {
-			if (this.searchTimeout) clearTimeout(this.searchTimeout);
-			this.searchTimeout = setTimeout(() => this.onSearch(this.searchInput.value.trim()), SEARCH_DEBOUNCE_MS);
 			this.updateTypeahead();
 		});
 	}
@@ -90,15 +87,8 @@ export class SearchController {
 		}
 	}
 
-	/** Trigger an immediate search (debounced) */
-	triggerSearch() {
-		if (this.searchTimeout) clearTimeout(this.searchTimeout);
-		this.searchTimeout = setTimeout(() => this.onSearch(this.searchInput.value.trim()), 0);
-	}
-
 	/** Clean up pending timeouts */
 	cleanup() {
-		if (this.searchTimeout) clearTimeout(this.searchTimeout);
 		if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);
 	}
 

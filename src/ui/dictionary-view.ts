@@ -25,7 +25,6 @@ export class DictionaryView extends ItemView {
 
 	// Result state
 	private currentResult: DictionaryResult | null = null;
-	private currentWord: string = "";
 
 	// UI element references
 	private chatSuggestionsContainer!: HTMLElement;
@@ -36,7 +35,7 @@ export class DictionaryView extends ItemView {
 
 		// Initialize controllers with callbacks
 		this.search = new SearchController((word) => this.onSearch(word));
-		this.nav = new NavHistory((word) => this.onNavigate(word));
+		this.nav = new NavHistory((word) => this.onNavigate(word), (history) => this.persistNavHistory(history));
 		this.chat = new ChatController(
 			this.app,
 			this,
@@ -128,7 +127,7 @@ export class DictionaryView extends ItemView {
 		clearBtn.setText("\u{1F5D1} Clear");
 		clearBtn.addEventListener("click", () => this.chat.clearChat());
 
-		const chatMessages = chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
+		chatContainer.createDiv({ cls: "ed-chat-messages", attr: { id: "ed-chat-messages" } });
 
 		const chatForm = chatContainer.createEl("form", { cls: "ed-chat-form" });
 		const chatInput = chatForm.createEl("input", {
@@ -144,8 +143,7 @@ export class DictionaryView extends ItemView {
 		});
 		chatRecentsBtn.setText("\u{1F552}");
 
-		const chatSendBtn = chatActions.createEl("button", { cls: "ed-chat-send-btn", attr: { type: "submit" } });
-		chatSendBtn.setText("Send");
+		chatActions.createEl("button", { cls: "ed-chat-send-btn", text: "Send", attr: { type: "submit" } });
 
 		// Chat recents dropdown (in chatSection, not chatContainer, to avoid clipping)
 		const chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
@@ -240,6 +238,8 @@ export class DictionaryView extends ItemView {
 	/** Called by SearchController when user submits a search or selects typeahead */
 	private onSearch(word: string) {
 		if (!word) {
+			this.currentResult = null;
+			this.chatSuggestionsContainer.empty();
 			const resultArea = this.containerEl.querySelector("#ed-result-area");
 			if (resultArea) {
 				resultArea.innerHTML = EMPTY_STATE_HTML;
@@ -253,7 +253,7 @@ export class DictionaryView extends ItemView {
 	private onNavigate(word: string) {
 		this.search.setSearchText(word);
 		this.search.hideTypeahead();
-		this.doLookup(word, true);
+		this.doLookup(word, false);
 	}
 
 	// ============================================================
@@ -264,6 +264,11 @@ export class DictionaryView extends ItemView {
 		const resultArea = this.containerEl.querySelector("#ed-result-area");
 		if (!resultArea) return;
 
+		if (!isDatabaseReady()) {
+			resultArea.innerHTML = renderDbLoading();
+			return;
+		}
+
 		resultArea.innerHTML = renderLoading(word);
 
 		try {
@@ -273,15 +278,14 @@ export class DictionaryView extends ItemView {
 
 			if (result) {
 				this.currentResult = result;
-				this.currentWord = word;
 				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
 
 				// Update chat suggestion chips for this word
 				this.chat.renderChatSuggestions();
+				this.nav.setCurrentWord(word);
 
 				if (pushHistory) {
 					this.nav.push(word);
-					this.nav.setCurrentWord(word);
 				}
 
 				// Auto-play audio for Spanish words
@@ -290,14 +294,13 @@ export class DictionaryView extends ItemView {
 				}
 			} else {
 				this.currentResult = null;
-				this.currentWord = word;
 				// Best-guess language detection for the not-found prompt
 				const langGuess = /[áéíóúñüÁÉÍÓÚÑÜ]/.test(word) ? "es" : "en";
 				resultArea.innerHTML = renderNotFound(word, langGuess);
 				this.chatSuggestionsContainer.empty();
+				this.nav.setCurrentWord(word);
 				if (pushHistory) {
 					this.nav.push(word);
-					this.nav.setCurrentWord(word);
 				}
 			}
 		} catch (err) {
@@ -347,6 +350,11 @@ export class DictionaryView extends ItemView {
 		this.search.setSearchText(word);
 		this.search.hideTypeahead();
 		this.doLookup(word, true);
+	}
+
+	private persistNavHistory(history: string[]) {
+		this.plugin.settings.navHistory = history;
+		void this.plugin.saveSettings();
 	}
 
 	private handleExtLink(el: HTMLElement | null) {

@@ -165,7 +165,7 @@ function renderDefinitions(definitions: Definition[], lang: string): string {
 function makeReverseDefClickable(text: string): string {
 	// Match pattern: "word" or "word (pos)" — the word part is clickable
 	const result = text.replace(/\b([a-záéíóúñüÁÉÍÓÚÑÜ]+(?:[a-záéíóúñüÁÉÍÓÚÑÜ]*))\s*(?:\(([^)]*)\))?/gi,
-		(fullMatch, word, pos) => {
+		(_fullMatch, word, pos) => {
 			return makeClickable(word, "es") + (pos ? ` <span class="ed-def-tags">${escapeHtml(pos)}</span>` : "");
 		}
 	);
@@ -181,7 +181,7 @@ function makeEnglishDefClickable(text: string): string {
 	// Strip leading "to " for verb forms — we want "to" as plain text, "speak" clickable
 	// Split on commas, semicolons, and parenthetical tags to identify individual words
 	// General approach: make each alphabetic word (3+ chars) clickable as English
-	return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word, offset) => {
+	return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word) => {
 		// Don't link common English function words
 		const skip = new Set(["the","and","that","this","with","from","for","not","but","who","whom","whose","which","what","where","when","how","than","then","also","very","much","more","most","some","such","only","own","same","will","shall","may","might","can","could","would","should","has","have","had","been","being","does","did","done","made","make","like","just","over","into","also","back","because","through","between","before","after","while","during","without","within","about","above","below","under","these","those","other","another","each","every","both","few","many","several","there","here","where","when","why","still","even","too","yet","nor","either","neither","though","although","except","since","until","upon"]);
 		if (skip.has(word.toLowerCase())) return escapeHtml(match);

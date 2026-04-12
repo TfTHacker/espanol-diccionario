@@ -1,6 +1,5 @@
 // src/audio/provider.ts — Audio playback using Google TTS (Castilian Spanish)
 
-import type { PluginSettings } from "../settings";
 import { AUDIO_LOAD_TIMEOUT_MS } from "../constants";
 
 /**
