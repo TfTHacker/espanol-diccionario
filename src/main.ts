@@ -1,7 +1,7 @@
 // src/main.ts — Plugin entry, registration, lifecycle
 
 import { Plugin, Platform, Notice, MarkdownView, type ObsidianProtocolData } from "obsidian";
-import { EspañolDiccionarioSettingTab, DEFAULT_SETTINGS, cloneDefaultSettings, type PluginSettings } from "./settings";
+import { EspañolDiccionarioSettingTab, normalizeSettings, cloneDefaultSettings, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
 import { ModelPickerDialog } from "./ui/model-selector";
@@ -65,27 +65,7 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		const loaded = await this.loadData();
-		this.settings = cloneDefaultSettings();
-
-		if (!loaded) return;
-
-		for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof PluginSettings)[]) {
-			if (key in loaded) {
-				(this.settings as unknown as Record<string, unknown>)[key] = loaded[key];
-			}
-		}
-
-		this.settings.navHistory = Array.isArray(this.settings.navHistory) ? [...this.settings.navHistory] : [];
-		this.settings.chatPromptHistory = Array.isArray(this.settings.chatPromptHistory) ? [...this.settings.chatPromptHistory] : [];
-		this.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions] as PluginSettings["chatSuggestions"];
-		if (Array.isArray(loaded.chatSuggestions)) {
-			for (let i = 0; i < 4; i++) {
-				if (typeof loaded.chatSuggestions[i] === "string") {
-					this.settings.chatSuggestions[i] = loaded.chatSuggestions[i];
-				}
-			}
-		}
+		this.settings = normalizeSettings(await this.loadData());
 	}
 
 	async saveSettings() {

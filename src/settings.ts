@@ -51,6 +51,41 @@ export function cloneDefaultSettings(): PluginSettings {
 	};
 }
 
+export function normalizeSettings(loaded: unknown): PluginSettings {
+	const settings = cloneDefaultSettings();
+	if (!loaded || typeof loaded !== "object") return settings;
+
+	const raw = loaded as Partial<PluginSettings>;
+
+	if (typeof raw.llmServerUrl === "string") settings.llmServerUrl = raw.llmServerUrl;
+	if (typeof raw.llmApiKey === "string") settings.llmApiKey = raw.llmApiKey;
+	if (typeof raw.llmModel === "string") settings.llmModel = raw.llmModel;
+	if (typeof raw.llmTemperature === "number") settings.llmTemperature = raw.llmTemperature;
+	if (typeof raw.systemPrompt === "string") settings.systemPrompt = raw.systemPrompt;
+	if (typeof raw.maxSentences === "number") settings.maxSentences = raw.maxSentences;
+	if (typeof raw.autoPlayAudio === "boolean") settings.autoPlayAudio = raw.autoPlayAudio;
+	if (typeof raw.notFoundPrompt === "string") settings.notFoundPrompt = raw.notFoundPrompt;
+
+	if (Array.isArray(raw.navHistory)) {
+		settings.navHistory = raw.navHistory.filter((item): item is string => typeof item === "string");
+	}
+
+	if (Array.isArray(raw.chatPromptHistory)) {
+		settings.chatPromptHistory = raw.chatPromptHistory.filter((item): item is string => typeof item === "string");
+	}
+
+	if (Array.isArray(raw.chatSuggestions)) {
+		for (let i = 0; i < 4; i++) {
+			const suggestion = raw.chatSuggestions[i];
+			if (typeof suggestion === "string") {
+				settings.chatSuggestions[i] = suggestion;
+			}
+		}
+	}
+
+	return settings;
+}
+
 export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 	plugin: EspañolDiccionarioPlugin;
 

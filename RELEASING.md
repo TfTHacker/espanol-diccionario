@@ -14,7 +14,7 @@ Triggers:
 The workflow:
 1. checks out the repo
 2. installs dependencies with `npm ci`
-3. runs `npx tsc --noEmit`
+3. runs `npm run typecheck`
 4. runs `npm run build`
 5. downloads `dictionary.db` from the latest GitHub release asset URL
 6. packages release assets
