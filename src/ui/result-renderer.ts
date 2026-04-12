@@ -157,19 +157,44 @@ function renderDefinitions(definitions: Definition[], lang: string): string {
 	</div>`;
 }
 
+const ENGLISH_SKIP_WORDS = new Set(["the","and","that","this","with","from","for","not","but","who","whom","whose","which","what","where","when","how","than","then","also","very","much","more","most","some","such","only","own","same","will","shall","may","might","can","could","would","should","has","have","had","been","being","does","did","done","made","make","like","just","over","into","also","back","because","through","between","before","after","while","during","without","within","about","above","below","under","these","those","other","another","each","every","both","few","many","several","there","here","where","when","why","still","even","too","yet","nor","either","neither","though","although","except","since","until","upon"]);
+
+function replaceMatchesSafely(
+	text: string,
+	regex: RegExp,
+	renderMatch: (match: RegExpMatchArray) => string,
+): string {
+	const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
+	const globalRegex = new RegExp(regex.source, flags);
+	let result = "";
+	let lastIndex = 0;
+
+	for (const match of text.matchAll(globalRegex)) {
+		const index = match.index ?? 0;
+		result += escapeHtml(text.slice(lastIndex, index));
+		result += renderMatch(match);
+		lastIndex = index + match[0].length;
+	}
+
+	result += escapeHtml(text.slice(lastIndex));
+	return result;
+}
+
 /**
  * Make a reverse-definition clickable.
  * English entries show Spanish translations like "sueño (noun)" or "hablar (verb)"
  * We want the Spanish word to be clickable.
  */
 function makeReverseDefClickable(text: string): string {
-	// Match pattern: "word" or "word (pos)" — the word part is clickable
-	const result = text.replace(/\b([a-záéíóúñüÁÉÍÓÚÑÜ]+(?:[a-záéíóúñüÁÉÍÓÚÑÜ]*))\s*(?:\(([^)]*)\))?/gi,
-		(_fullMatch, word, pos) => {
+	return replaceMatchesSafely(
+		text,
+		/\b([a-záéíóúñüÁÉÍÓÚÑÜ]+(?:[a-záéíóúñüÁÉÍÓÚÑÜ]*))\s*(?:\(([^)]*)\))?/gi,
+		(match) => {
+			const word = match[1];
+			const pos = match[2];
 			return makeClickable(word, "es") + (pos ? ` <span class="ed-def-tags">${escapeHtml(pos)}</span>` : "");
-		}
+		},
 	);
-	return result;
 }
 
 /**
@@ -178,13 +203,9 @@ function makeReverseDefClickable(text: string): string {
  * Each English word is clickable (looks up English→Spanish reverse entry).
  */
 function makeEnglishDefClickable(text: string): string {
-	// Strip leading "to " for verb forms — we want "to" as plain text, "speak" clickable
-	// Split on commas, semicolons, and parenthetical tags to identify individual words
-	// General approach: make each alphabetic word (3+ chars) clickable as English
-	return text.replace(/\b([a-zA-Z]{3,})\b/g, (match, word) => {
-		// Don't link common English function words
-		const skip = new Set(["the","and","that","this","with","from","for","not","but","who","whom","whose","which","what","where","when","how","than","then","also","very","much","more","most","some","such","only","own","same","will","shall","may","might","can","could","would","should","has","have","had","been","being","does","did","done","made","make","like","just","over","into","also","back","because","through","between","before","after","while","during","without","within","about","above","below","under","these","those","other","another","each","every","both","few","many","several","there","here","where","when","why","still","even","too","yet","nor","either","neither","though","although","except","since","until","upon"]);
-		if (skip.has(word.toLowerCase())) return escapeHtml(match);
+	return replaceMatchesSafely(text, /\b([a-zA-Z]{3,})\b/g, (match) => {
+		const word = match[1];
+		if (ENGLISH_SKIP_WORDS.has(word.toLowerCase())) return escapeHtml(match[0]);
 		return makeClickable(word, "en");
 	});
 }
@@ -223,12 +244,12 @@ function makeClickable(word: string, lang: string): string {
  * Only words 3+ characters are made clickable to avoid linking particles.
  */
 function makeSentenceClickable(sentence: string, lang: string): string {
-	// Split the sentence into tokens (words and punctuation/whitespace)
-	return sentence.replace(/[a-záéíóúñüÁÉÍÓÚÑÜ]+[a-záéíóúñüÁÉÍÓÚÑÜ']*/gi, (match) => {
-		if (match.length >= 3) {
-			return makeClickable(match, lang);
+	return replaceMatchesSafely(sentence, /[a-záéíóúñüÁÉÍÓÚÑÜ]+[a-záéíóúñüÁÉÍÓÚÑÜ']*/gi, (match) => {
+		const word = match[0];
+		if (word.length >= 3) {
+			return makeClickable(word, lang);
 		}
-		return escapeHtml(match);
+		return escapeHtml(word);
 	});
 }
 

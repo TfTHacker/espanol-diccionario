@@ -1,6 +1,6 @@
 // src/ui/chat-controller.ts — Chat UI logic for DictionaryView
 
-import { MarkdownRenderer, Component } from "obsidian";
+import { App, MarkdownRenderer, Component } from "obsidian";
 import { streamChatMessage } from "../chat/provider";
 import type { ChatMessage } from "../chat/provider";
 import type { DictionaryResult } from "../dictionary/data";
@@ -24,14 +24,14 @@ export class ChatController {
 	private isStreaming = false;
 
 	// References needed from the view
-	private app: any; // Obsidian App
+	private app: App;
 	private component: Component; // For MarkdownRenderer
 	private settings: () => PluginSettings;
 	private saveSettings: () => Promise<void>;
 	private currentResult: () => DictionaryResult | null;
 
 	constructor(
-		app: any,
+		app: App,
 		component: Component,
 		getSettings: () => PluginSettings,
 		saveSettings: () => Promise<void>,

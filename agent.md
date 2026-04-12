@@ -26,8 +26,7 @@ src/
 ├── audio/
 │   └── provider.ts            # Google TTS audio playback (es-ES locale)
 ├── chat/
-│   ├── provider.ts            # OpenAI-compatible chat + streaming helpers
-│   └── prompts.ts             # Legacy/default prompt constant; currently not wired into runtime settings flow
+│   └── provider.ts            # OpenAI-compatible chat + streaming helpers
 ├── ui/
 │   ├── dictionary-view.ts     # Main dictionary view and event wiring
 │   ├── chat-controller.ts     # Chat panel behavior and markdown rendering
