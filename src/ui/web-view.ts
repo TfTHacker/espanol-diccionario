@@ -22,6 +22,10 @@ interface ElectronRequire {
 	(module: "electron"): { shell: { openExternal: (url: string) => void } };
 }
 
+interface WindowWithRequire extends Window {
+	require?: ElectronRequire;
+}
+
 export class WebView extends ItemView {
 	private url: string = "";
 	private titleText: string = "";
@@ -102,7 +106,7 @@ export class WebView extends ItemView {
 			webview.reload();
 		});
 		openExtBtn.addEventListener("click", () => {
-			const electronReq = (window as unknown as { require?: ElectronRequire }).require;
+			const electronReq = (window as WindowWithRequire).require;
 			if (electronReq) {
 				electronReq("electron").shell.openExternal(url);
 			} else {

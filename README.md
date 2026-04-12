@@ -5,7 +5,7 @@ An Obsidian plugin for learning **Spain (Castilian) Spanish**, featuring:
 - **Bidirectional dictionary** — Look up English → Spanish or Spanish → English
 - **Offline core** — Type a word → see definition, IPA, part of speech, example sentences
 - **Smart lemmatization** — Conjugated forms (hablamos, están, casas) auto-resolve to the dictionary form
-- **Audio pronunciation** — Wikimedia Commons Spain Spanish recordings with Google TTS fallback
+- **Audio pronunciation** — Google TTS with Castilian Spanish (`es-ES`) pronunciation
 - **AI chat** — Ask grammar questions and get more examples via an OpenAI-compatible LLM (Ollama, OpenAI, Groq, etc.)
 - **Mobile support** — Works on Obsidian mobile (iOS + Android)
 
@@ -13,11 +13,10 @@ An Obsidian plugin for learning **Spain (Castilian) Spanish**, featuring:
 
 ### From Release
 
-1. Download the latest release assets (`main.js`, `manifest.json`, `styles.css`, `data/dictionary.db`)
+1. Download the latest release assets (`main.js`, `manifest.json`, `styles.css`, `dictionary.db`, `sql-wasm.wasm`)
 2. Create a folder `.obsidian/plugins/espanol-diccionario/` in your vault
 3. Copy all files into that folder
-4. Also copy `sql-wasm.wasm` into the same folder (available in releases)
-5. Enable the plugin in Obsidian Settings → Community Plugins
+4. Enable the plugin in Obsidian Settings → Community Plugins
 
 ### From Source
 
@@ -86,7 +85,7 @@ Open **Settings → Español Diccionario** to configure:
 
 - **API keys** are stored in your vault's `.obsidian/plugins/espanol-diccionario/data.json` — local to your machine, never committed to any repository
 - **Dictionary data** is processed offline from open/CC-licensed sources
-- **Audio** streams from Wikimedia Commons; no data is sent to third parties
+- **Audio** uses Google Translate TTS for pronunciation playback
 - **Chat** sends your messages to your configured LLM endpoint (local or cloud)
 
 ## Data Sources
@@ -97,7 +96,7 @@ Open **Settings → Español Diccionario** to configure:
 | [Tatoeba](https://tatoeba.org) via [doozan/spanish_data](https://github.com/doozan/spanish_data) | CC BY 2.0 | Example sentences |
 | [doozan/es_allforms](https://github.com/doozan/spanish_data) | CC BY 4.0 | Lemmatization table |
 | [FrequencyWords](https://github.com/hermitdave/FrequencyWords) | MIT | Word frequency ranking |
-| [Wikimedia Commons](https://commons.wikimedia.org) | PD/CC | Spain Spanish audio |
+| [Google Translate TTS](https://translate.google.com/) | Proprietary service | Castilian Spanish pronunciation playback |
 
 ## Development
 

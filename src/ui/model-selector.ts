@@ -2,6 +2,7 @@
 
 import { App, Modal, requestUrl } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
+import { VIEW_TYPE_DICTIONARY } from "../constants";
 
 interface ModelInfo {
 	id: string;
@@ -210,7 +211,7 @@ export class ModelPickerDialog extends Modal {
 				this.close();
 
 				// Notify any open dictionary views to update model label
-				const leaves = this.app.workspace.getLeavesOfType("espanol-diccionario-view");
+				const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_DICTIONARY);
 				for (const leaf of leaves) {
 					if (leaf.view && typeof (leaf.view as DictionaryView).updateChatModelLabel === "function") {
 						(leaf.view as DictionaryView).updateChatModelLabel();
