@@ -1,9 +1,9 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { FuzzySuggestModal, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 
 import type EspañolDiccionarioPlugin from "../main";
 import { playSpanishAudio, splitSpanishTtsText } from "../audio/provider";
 import { MAX_TTS_PRACTICE_HISTORY, VIEW_TYPE_TTS_PRACTICE as VIEW_TYPE_TTS_PRACTICE_CONST } from "../constants";
-import { normalizePracticeDraft, pushPracticeHistoryEntry, sanitizePracticeHistory } from "./tts-practice-state";
+import { getPracticePlaybackText, insertImportedText, normalizePracticeDraft, pushPracticeHistoryEntry, sanitizePracticeHistory } from "./tts-practice-state";
 
 export const VIEW_TYPE_TTS_PRACTICE_VIEW = VIEW_TYPE_TTS_PRACTICE_CONST;
 
@@ -89,6 +89,10 @@ export class TtsPracticeView extends ItemView {
 			this.focusInput();
 		});
 
+		const insertFileBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-insert-file-btn", attr: { type: "button", title: "Insert file into reader" } });
+		insertFileBtn.setText("📄");
+		insertFileBtn.addEventListener("click", () => this.openFilePicker());
+
 		this.historyDropdownEl = toolbar.createDiv({ cls: "ed-recents ed-tts-history-dropdown ed-hidden" });
 
 		this.textAreaEl = container.createEl("textarea", {
@@ -146,7 +150,11 @@ export class TtsPracticeView extends ItemView {
 	private async handlePlay() {
 		if (this.playInFlight || this.playBtnEl.disabled) return;
 
-		const text = this.textAreaEl.value.trim();
+		const text = getPracticePlaybackText(
+			this.textAreaEl.value,
+			this.textAreaEl.selectionStart ?? 0,
+			this.textAreaEl.selectionEnd ?? 0,
+		);
 		if (!text) {
 			new Notice("Enter Spanish text to play.");
 			this.setStatus("Add some text first.");
@@ -297,6 +305,22 @@ export class TtsPracticeView extends ItemView {
 		await this.plugin.saveSettings();
 	}
 
+	private openFilePicker() {
+		new PracticeFileSuggestModal(this.plugin, async (file) => {
+			const content = await this.app.vault.cachedRead(file);
+			const nextValue = insertImportedText(
+				this.textAreaEl.value,
+				content,
+				this.textAreaEl.selectionStart ?? this.textAreaEl.value.length,
+				this.textAreaEl.selectionEnd ?? this.textAreaEl.value.length,
+			);
+			this.textAreaEl.value = nextValue;
+			await this.persistDraft();
+			this.setStatus(`Inserted ${file.path}.`);
+			this.focusInput();
+		}).open();
+	}
+
 	private scheduleDraftPersist() {
 		this.clearDraftSaveTimer();
 		this.draftSaveTimer = window.setTimeout(() => {
@@ -310,5 +334,29 @@ export class TtsPracticeView extends ItemView {
 			window.clearTimeout(this.draftSaveTimer);
 			this.draftSaveTimer = null;
 		}
+	}
+}
+
+class PracticeFileSuggestModal extends FuzzySuggestModal<TFile> {
+	private plugin: EspañolDiccionarioPlugin;
+	private onChoose: (file: TFile) => void | Promise<void>;
+
+	constructor(plugin: EspañolDiccionarioPlugin, onChoose: (file: TFile) => void | Promise<void>) {
+		super(plugin.app);
+		this.plugin = plugin;
+		this.onChoose = onChoose;
+		this.setPlaceholder("Select a Markdown or text file to insert...");
+	}
+
+	getItems(): TFile[] {
+		return this.plugin.app.vault.getFiles().filter((file) => ["md", "txt"].includes(file.extension));
+	}
+
+	getItemText(file: TFile): string {
+		return file.path;
+	}
+
+	onChooseItem(file: TFile): void {
+		void this.onChoose(file);
 	}
 }

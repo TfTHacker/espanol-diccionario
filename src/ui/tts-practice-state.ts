@@ -25,3 +25,22 @@ export function sanitizePracticeHistory(input: unknown, limit = MAX_TTS_PRACTICE
 export function normalizePracticeDraft(input: unknown): string {
 	return typeof input === "string" ? input : "";
 }
+
+export function getPracticePlaybackText(text: string, selectionStart: number, selectionEnd: number): string {
+	if (selectionStart !== selectionEnd) {
+		return text.slice(Math.min(selectionStart, selectionEnd), Math.max(selectionStart, selectionEnd)).trim();
+	}
+	return text.trim();
+}
+
+export function insertImportedText(current: string, imported: string, selectionStart: number, selectionEnd: number): string {
+	if (!imported) return current;
+
+	const start = Math.min(selectionStart, selectionEnd);
+	const end = Math.max(selectionStart, selectionEnd);
+	const prefix = current.slice(0, start);
+	const suffix = current.slice(end);
+	const isReplacingSelection = start !== end;
+	const spacer = prefix && !prefix.endsWith("\n") && !imported.startsWith("\n") ? "\n\n" : "";
+	return `${prefix}${isReplacingSelection ? "" : spacer}${imported}${suffix}`;
+}

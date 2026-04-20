@@ -5,6 +5,8 @@ import {
 	pushPracticeHistoryEntry,
 	sanitizePracticeHistory,
 	normalizePracticeDraft,
+	getPracticePlaybackText,
+	insertImportedText,
 } from "../src/ui/tts-practice-state";
 import { splitSpanishTtsText } from "../src/audio/provider";
 
@@ -58,4 +60,40 @@ test("splitSpanishTtsText hard-splits tokens longer than the maximum chunk size"
 	const chunks = splitSpanishTtsText(longWord, 20);
 	assert.ok(chunks.length > 1);
 	assert.ok(chunks.every((chunk) => chunk.length <= 20));
+});
+
+test("getPracticePlaybackText prefers selected textarea content when present", () => {
+	const text = "Primera línea.\nSegunda línea.\nTercera línea.";
+	const start = text.indexOf("Segunda");
+	const end = start + "Segunda línea.".length;
+	assert.equal(getPracticePlaybackText(text, start, end), "Segunda línea.");
+});
+
+test("getPracticePlaybackText falls back to the full trimmed block when selection is empty", () => {
+	assert.equal(getPracticePlaybackText("  Hola mundo  ", 2, 2), "Hola mundo");
+});
+
+test("getPracticePlaybackText does not fall back to the full block for whitespace-only selections", () => {
+	assert.equal(getPracticePlaybackText("Hola mundo", 4, 5), "");
+});
+
+test("insertImportedText replaces the current selection with imported file text", () => {
+	const current = "Uno\nDos\nTres";
+	const start = current.indexOf("Dos");
+	const end = start + "Dos".length;
+	assert.equal(insertImportedText(current, "Archivo\nImportado", start, end), "Uno\nArchivo\nImportado\nTres");
+});
+
+test("insertImportedText appends imported file text when there is no selection", () => {
+	assert.equal(insertImportedText("Uno", "Dos", 3, 3), "Uno\n\nDos");
+	assert.equal(insertImportedText("", "Dos", 0, 0), "Dos");
+});
+
+test("insertImportedText inserts imported text at the caret when there is no selection", () => {
+	assert.equal(insertImportedText("Uno Tres", "Dos", 4, 4), "Uno \n\nDosTres");
+});
+
+test("insertImportedText preserves imported whitespace and indentation", () => {
+	const imported = "  código\n    bloque\n";
+	assert.equal(insertImportedText("Base", imported, 4, 4), "Base\n\n  código\n    bloque\n");
 });
