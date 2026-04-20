@@ -14,6 +14,8 @@ export interface PluginSettings {
 	maxSentences: number;
 	autoPlayAudio: boolean;
 	navHistory: string[];
+	ttsPracticeHistory: string[];
+	ttsPracticeDraft: string;
 	chatPromptHistory: string[];
 	chatSuggestions: [string, string, string, string];
 	notFoundPrompt: string;
@@ -32,6 +34,8 @@ language the user writes in (English or Spanish).`,
 	maxSentences: 5,
 	autoPlayAudio: false,
 	navHistory: [],
+	ttsPracticeHistory: [],
+	ttsPracticeDraft: "",
 	chatPromptHistory: [],
 	chatSuggestions: [
 		"Tell me more about \"{word}\"",
@@ -46,6 +50,7 @@ export function cloneDefaultSettings(): PluginSettings {
 	return {
 		...DEFAULT_SETTINGS,
 		navHistory: [...DEFAULT_SETTINGS.navHistory],
+		ttsPracticeHistory: [...DEFAULT_SETTINGS.ttsPracticeHistory],
 		chatPromptHistory: [...DEFAULT_SETTINGS.chatPromptHistory],
 		chatSuggestions: [...DEFAULT_SETTINGS.chatSuggestions],
 	};
@@ -65,9 +70,14 @@ export function normalizeSettings(loaded: unknown): PluginSettings {
 	if (typeof raw.maxSentences === "number") settings.maxSentences = raw.maxSentences;
 	if (typeof raw.autoPlayAudio === "boolean") settings.autoPlayAudio = raw.autoPlayAudio;
 	if (typeof raw.notFoundPrompt === "string") settings.notFoundPrompt = raw.notFoundPrompt;
+	if (typeof raw.ttsPracticeDraft === "string") settings.ttsPracticeDraft = raw.ttsPracticeDraft;
 
 	if (Array.isArray(raw.navHistory)) {
 		settings.navHistory = raw.navHistory.filter((item): item is string => typeof item === "string");
+	}
+
+	if (Array.isArray(raw.ttsPracticeHistory)) {
+		settings.ttsPracticeHistory = raw.ttsPracticeHistory.filter((item): item is string => typeof item === "string");
 	}
 
 	if (Array.isArray(raw.chatPromptHistory)) {

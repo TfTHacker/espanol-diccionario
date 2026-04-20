@@ -3,6 +3,7 @@
 import { Plugin, Platform, Notice, MarkdownView, type ObsidianProtocolData } from "obsidian";
 import { EspañolDiccionarioSettingTab, normalizeSettings, cloneDefaultSettings, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
+import { TtsPracticeView, VIEW_TYPE_TTS_PRACTICE_VIEW } from "./ui/tts-practice-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
 import { ModelPickerDialog } from "./ui/model-selector";
 import { initDatabase, closeDatabase } from "./dictionary/db";
@@ -17,6 +18,10 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		// Register the dictionary view
 		this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
 			return new DictionaryView(leaf, this);
+		});
+
+		this.registerView(VIEW_TYPE_TTS_PRACTICE_VIEW, (leaf) => {
+			return new TtsPracticeView(leaf, this);
 		});
 
 		// Register the web viewer (desktop only — uses Electron webview)
@@ -42,6 +47,18 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			id: "change-llm-model",
 			name: "Change LLM model",
 			callback: () => this.openModelPicker(),
+		});
+
+		this.addCommand({
+			id: "open-tts-practice",
+			name: "Open Spanish TTS practice",
+			callback: () => this.activateTtsPracticeView(),
+		});
+
+		this.addCommand({
+			id: "send-selection-to-tts-practice",
+			name: "Send selected text to Spanish TTS practice",
+			callback: () => void this.sendSelectionToTtsPractice(),
 		});
 
 		this.addCommand({
@@ -178,6 +195,54 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		if (leaf && leaf.view instanceof DictionaryView) {
 			leaf.view.focusSearch();
 		}
+	}
+
+	async activateTtsPracticeView(initialText?: string) {
+		const { workspace } = this.app;
+
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_TTS_PRACTICE_VIEW)[0];
+
+		if (!leaf) {
+			const newLeaf = workspace.getLeaf("tab");
+			if (newLeaf) {
+				await newLeaf.setViewState({
+					type: VIEW_TYPE_TTS_PRACTICE_VIEW,
+					active: true,
+				});
+				leaf = newLeaf;
+			}
+		} else {
+			workspace.revealLeaf(leaf);
+		}
+
+		if (leaf && leaf.view instanceof TtsPracticeView) {
+			if (typeof initialText === "string") {
+				leaf.view.setPracticeText(initialText);
+			}
+			leaf.view.focusInput();
+		}
+	}
+
+	private async sendSelectionToTtsPractice() {
+		const activeLeaf = this.app.workspace.activeLeaf;
+		if (!activeLeaf) {
+			new Notice("Open a Markdown file and select text first.");
+			return;
+		}
+
+		const view = activeLeaf.view;
+		if (!(view instanceof MarkdownView)) {
+			new Notice("Open a Markdown file and select text first.");
+			return;
+		}
+
+		const selected = view.editor?.getSelection()?.trim() ?? "";
+		if (!selected) {
+			new Notice("Select some text first.");
+			return;
+		}
+
+		await this.activateTtsPracticeView(selected);
 	}
 
 	/**

@@ -1031,3 +1031,75 @@
 	color: var(--interactive-accent-hover);
 	text-decoration: underline;
 }
+
+/* === TTS Practice View === */
+.ed-tts-practice {
+	position: relative;
+	gap: 12px;
+}
+
+.ed-tts-toolbar {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	position: relative;
+	flex-wrap: wrap;
+}
+
+.ed-tts-textarea {
+	width: 100%;
+	min-height: 220px;
+	resize: vertical;
+	padding: 12px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 14px;
+	line-height: 1.55;
+	font-family: var(--font-text);
+}
+
+.ed-tts-textarea:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+.ed-tts-status {
+	font-size: 13px;
+	color: var(--text-muted);
+	padding: 0 2px;
+}
+
+.ed-tts-privacy-note {
+	font-size: 12px;
+	color: var(--text-faint);
+	line-height: 1.4;
+	padding: 0 2px;
+}
+
+.ed-tts-history-dropdown {
+	left: 0;
+	top: 34px;
+	width: min(420px, calc(100vw - 48px));
+}
+
+.ed-tts-history-item {
+	align-items: flex-start;
+}
+
+.ed-tts-history-text {
+	white-space: normal;
+	overflow: visible;
+	text-overflow: unset;
+	line-height: 1.4;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+}
+
+.is-mobile .ed-tts-textarea {
+	min-height: 180px;
+}
+
