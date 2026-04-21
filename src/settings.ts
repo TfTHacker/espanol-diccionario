@@ -16,6 +16,8 @@ export interface PluginSettings {
 	navHistory: string[];
 	ttsPracticeHistory: string[];
 	ttsPracticeDraft: string;
+	ttsPracticeAutoRepeat: boolean;
+	spanishChatSystemPrompt: string;
 	chatPromptHistory: string[];
 	chatSuggestions: [string, string, string, string];
 	notFoundPrompt: string;
@@ -36,6 +38,12 @@ language the user writes in (English or Spanish).`,
 	navHistory: [],
 	ttsPracticeHistory: [],
 	ttsPracticeDraft: "",
+	ttsPracticeAutoRepeat: false,
+	spanishChatSystemPrompt: `You are a patient Castilian Spanish conversation partner and tutor.
+Help the user practice real Spanish dialogue for everyday situations in Spain.
+Prefer natural Spain Spanish vocabulary and usage. When helpful, gently correct mistakes,
+explain them briefly, and then continue the conversation.
+When the user asks for roleplay or sample dialogue, provide a clean Spanish-only dialogue block that sounds natural when read aloud, and keep explanations separate and brief unless the user asks for detailed notes.`,
 	chatPromptHistory: [],
 	chatSuggestions: [
 		"Tell me more about \"{word}\"",
@@ -71,6 +79,8 @@ export function normalizeSettings(loaded: unknown): PluginSettings {
 	if (typeof raw.autoPlayAudio === "boolean") settings.autoPlayAudio = raw.autoPlayAudio;
 	if (typeof raw.notFoundPrompt === "string") settings.notFoundPrompt = raw.notFoundPrompt;
 	if (typeof raw.ttsPracticeDraft === "string") settings.ttsPracticeDraft = raw.ttsPracticeDraft;
+	if (typeof raw.ttsPracticeAutoRepeat === "boolean") settings.ttsPracticeAutoRepeat = raw.ttsPracticeAutoRepeat;
+	if (typeof raw.spanishChatSystemPrompt === "string") settings.spanishChatSystemPrompt = raw.spanishChatSystemPrompt;
 
 	if (Array.isArray(raw.navHistory)) {
 		settings.navHistory = raw.navHistory.filter((item): item is string => typeof item === "string");
@@ -191,7 +201,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("System prompt")
-			.setDesc("Instructions that shape how the AI responds. Tailored for Spanish tutoring by default.")
+			.setDesc("Instructions that shape how the AI responds. Tailored for dictionary lookup chat by default.")
 			.addTextArea((text) => {
 				text
 					.setPlaceholder("You are a helpful Spanish language tutor...")
@@ -201,6 +211,27 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.rows = 4;
+				text.inputEl.style.width = "100%";
+			});
+
+		containerEl.createEl("h3", { text: "Spanish chat" });
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: "These settings power the dedicated Spanish Chat view for freeform conversation practice and dialogue generation.",
+		});
+
+		new Setting(containerEl)
+			.setName("Spanish chat system prompt")
+			.setDesc("Used by the standalone Spanish Chat view. Tailor it for roleplay, corrections, level-appropriate dialogue, or speaking practice.")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.spanishChatSystemPrompt)
+					.setValue(this.plugin.settings.spanishChatSystemPrompt)
+					.onChange(async (value) => {
+						this.plugin.settings.spanishChatSystemPrompt = value;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 6;
 				text.inputEl.style.width = "100%";
 			});
 
@@ -293,6 +324,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						this.plugin.settings.llmModel = DEFAULT_SETTINGS.llmModel;
 						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
 						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+						this.plugin.settings.spanishChatSystemPrompt = DEFAULT_SETTINGS.spanishChatSystemPrompt;
 						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
 						this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
 						await this.plugin.saveSettings();

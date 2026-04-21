@@ -2,8 +2,16 @@ import { FuzzySuggestModal, ItemView, Notice, TFile, WorkspaceLeaf } from "obsid
 
 import type EspañolDiccionarioPlugin from "../main";
 import { playSpanishAudio, splitSpanishTtsText } from "../audio/provider";
-import { MAX_TTS_PRACTICE_HISTORY, VIEW_TYPE_TTS_PRACTICE as VIEW_TYPE_TTS_PRACTICE_CONST } from "../constants";
-import { getPracticePlaybackText, insertImportedText, normalizePracticeDraft, pushPracticeHistoryEntry, sanitizePracticeHistory } from "./tts-practice-state";
+import { MAX_TTS_PRACTICE_HISTORY, TTS_PRACTICE_REPEAT_DELAY_MS, VIEW_TYPE_TTS_PRACTICE as VIEW_TYPE_TTS_PRACTICE_CONST } from "../constants";
+import {
+	getPracticePlaybackText,
+	insertImportedText,
+	normalizePracticeAutoRepeat,
+	normalizePracticeDraft,
+	pushPracticeHistoryEntry,
+	sanitizePracticeHistory,
+	shouldQueuePracticeRepeat,
+} from "./tts-practice-state";
 
 export const VIEW_TYPE_TTS_PRACTICE_VIEW = VIEW_TYPE_TTS_PRACTICE_CONST;
 
@@ -14,11 +22,14 @@ export class TtsPracticeView extends ItemView {
 	private draftSaveTimer: number | null = null;
 	private playRequestId = 0;
 	private playInFlight = false;
+	private autoRepeat = false;
+	private repeatTimer: number | null = null;
 	private textAreaEl!: HTMLTextAreaElement;
 	private historyDropdownEl!: HTMLElement;
 	private historyBtnEl!: HTMLButtonElement;
 	private playBtnEl!: HTMLButtonElement;
 	private stopBtnEl!: HTMLButtonElement;
+	private repeatBtnEl!: HTMLButtonElement;
 	private statusEl!: HTMLElement;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
@@ -41,6 +52,7 @@ export class TtsPracticeView extends ItemView {
 	async onOpen() {
 		this.history = sanitizePracticeHistory(this.plugin.settings.ttsPracticeHistory, MAX_TTS_PRACTICE_HISTORY);
 		const draft = normalizePracticeDraft(this.plugin.settings.ttsPracticeDraft);
+		this.autoRepeat = normalizePracticeAutoRepeat(this.plugin.settings.ttsPracticeAutoRepeat);
 
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
@@ -58,6 +70,13 @@ export class TtsPracticeView extends ItemView {
 		this.stopBtnEl.setText("■");
 		this.stopBtnEl.disabled = true;
 		this.stopBtnEl.addEventListener("click", () => this.handleStop("Stopped."));
+
+		this.repeatBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-repeat-btn", attr: { type: "button", title: "Auto-repeat playback: off" } });
+		this.repeatBtnEl.setText("🔁");
+		this.repeatBtnEl.addEventListener("click", () => {
+			void this.toggleAutoRepeat();
+		});
+		this.syncAutoRepeatButton();
 
 		this.historyBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-history-btn", attr: { type: "button", title: "Practice history" } });
 		this.historyBtnEl.setText("🕐");
@@ -134,6 +153,7 @@ export class TtsPracticeView extends ItemView {
 	async onClose() {
 		this.handleStop();
 		this.clearDraftSaveTimer();
+		this.clearRepeatTimer();
 		await this.persistDraft();
 	}
 
@@ -221,6 +241,11 @@ export class TtsPracticeView extends ItemView {
 				void this.playChunks(chunks, requestId, chunkIndex + 1);
 				return;
 			}
+			if (shouldQueuePracticeRepeat(this.autoRepeat, requestId, this.playRequestId, chunkIndex, chunks.length)) {
+				this.setStatus("Repeating soon…");
+				this.queueRepeat(chunks, requestId);
+				return;
+			}
 			this.playBtnEl.disabled = false;
 			this.stopBtnEl.disabled = true;
 			this.setStatus("Playback finished.");
@@ -238,6 +263,7 @@ export class TtsPracticeView extends ItemView {
 	private handleStop(status = "") {
 		this.playRequestId++;
 		this.playInFlight = false;
+		this.clearRepeatTimer();
 		if (this.currentAudio) {
 			this.currentAudio.pause();
 			this.currentAudio.currentTime = 0;
@@ -248,6 +274,54 @@ export class TtsPracticeView extends ItemView {
 		if (this.playBtnEl) this.playBtnEl.disabled = false;
 		if (this.stopBtnEl) this.stopBtnEl.disabled = true;
 		if (status) this.setStatus(status);
+	}
+
+	private queueRepeat(chunks: string[], requestId: number) {
+		this.clearRepeatTimer();
+		this.repeatTimer = window.setTimeout(() => {
+			this.repeatTimer = null;
+			if (!this.autoRepeat || requestId !== this.playRequestId) {
+				this.playBtnEl.disabled = false;
+				this.stopBtnEl.disabled = true;
+				this.setStatus("Playback finished.");
+				return;
+			}
+			this.playInFlight = true;
+			void this.playChunks(chunks, requestId, 0);
+		}, TTS_PRACTICE_REPEAT_DELAY_MS);
+	}
+
+	private clearRepeatTimer() {
+		if (this.repeatTimer !== null) {
+			window.clearTimeout(this.repeatTimer);
+			this.repeatTimer = null;
+		}
+	}
+
+	private async toggleAutoRepeat() {
+		this.autoRepeat = !this.autoRepeat;
+		this.plugin.settings.ttsPracticeAutoRepeat = this.autoRepeat;
+		this.syncAutoRepeatButton();
+		if (!this.autoRepeat && this.repeatTimer !== null) {
+			this.clearRepeatTimer();
+			if (!this.currentAudio && !this.playInFlight) {
+				this.playBtnEl.disabled = false;
+				this.stopBtnEl.disabled = true;
+				this.setStatus("Playback finished.");
+			}
+		}
+		await this.plugin.saveSettings();
+		if (this.autoRepeat) {
+			this.setStatus(this.currentAudio || this.repeatTimer !== null || this.playInFlight ? "Auto-repeat enabled." : "Auto-repeat enabled for next playback.");
+		} else {
+			this.setStatus("Auto-repeat disabled.");
+		}
+	}
+
+	private syncAutoRepeatButton() {
+		this.repeatBtnEl?.classList.toggle("ed-nav-btn-active", this.autoRepeat);
+		this.repeatBtnEl?.setAttribute("aria-pressed", this.autoRepeat ? "true" : "false");
+		this.repeatBtnEl?.setAttribute("title", this.autoRepeat ? "Auto-repeat playback: on" : "Auto-repeat playback: off");
 	}
 
 	private toggleHistory() {

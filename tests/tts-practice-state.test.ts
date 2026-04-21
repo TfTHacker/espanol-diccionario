@@ -5,8 +5,10 @@ import {
 	pushPracticeHistoryEntry,
 	sanitizePracticeHistory,
 	normalizePracticeDraft,
+	normalizePracticeAutoRepeat,
 	getPracticePlaybackText,
 	insertImportedText,
+	shouldQueuePracticeRepeat,
 } from "../src/ui/tts-practice-state";
 import { splitSpanishTtsText } from "../src/audio/provider";
 
@@ -34,6 +36,13 @@ test("sanitizePracticeHistory filters non-strings, trims values, deduplicates, a
 test("normalizePracticeDraft preserves text content but rejects non-strings", () => {
 	assert.equal(normalizePracticeDraft("  hola\nqué tal  "), "  hola\nqué tal  ");
 	assert.equal(normalizePracticeDraft(42), "");
+});
+
+test("normalizePracticeAutoRepeat accepts only boolean true and falls back to false otherwise", () => {
+	assert.equal(normalizePracticeAutoRepeat(true), true);
+	assert.equal(normalizePracticeAutoRepeat(false), false);
+	assert.equal(normalizePracticeAutoRepeat("true"), false);
+	assert.equal(normalizePracticeAutoRepeat(undefined), false);
 });
 
 test("splitSpanishTtsText keeps short text in one chunk", () => {
@@ -75,6 +84,14 @@ test("getPracticePlaybackText falls back to the full trimmed block when selectio
 
 test("getPracticePlaybackText does not fall back to the full block for whitespace-only selections", () => {
 	assert.equal(getPracticePlaybackText("Hola mundo", 4, 5), "");
+});
+
+test("shouldQueuePracticeRepeat only repeats after the final chunk when auto-repeat is enabled for the active request", () => {
+	assert.equal(shouldQueuePracticeRepeat(true, 7, 7, 2, 3), true);
+	assert.equal(shouldQueuePracticeRepeat(false, 7, 7, 2, 3), false);
+	assert.equal(shouldQueuePracticeRepeat(true, 7, 8, 2, 3), false);
+	assert.equal(shouldQueuePracticeRepeat(true, 7, 7, 1, 3), false);
+	assert.equal(shouldQueuePracticeRepeat(true, 7, 7, 0, 0), false);
 });
 
 test("insertImportedText replaces the current selection with imported file text", () => {

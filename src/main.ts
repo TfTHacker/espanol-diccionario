@@ -3,11 +3,12 @@
 import { Plugin, Platform, Notice, MarkdownView, type ObsidianProtocolData } from "obsidian";
 import { EspañolDiccionarioSettingTab, normalizeSettings, cloneDefaultSettings, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
+import { SpanishChatView } from "./ui/spanish-chat-view";
 import { TtsPracticeView, VIEW_TYPE_TTS_PRACTICE_VIEW } from "./ui/tts-practice-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
 import { ModelPickerDialog } from "./ui/model-selector";
 import { initDatabase, closeDatabase } from "./dictionary/db";
-import { PLUGIN_ID } from "./constants";
+import { PLUGIN_ID, VIEW_TYPE_SPANISH_CHAT } from "./constants";
 
 export default class EspañolDiccionarioPlugin extends Plugin {
 	settings: PluginSettings = cloneDefaultSettings();
@@ -18,6 +19,10 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		// Register the dictionary view
 		this.registerView(VIEW_TYPE_ESPANOL_DICCIONARIO, (leaf) => {
 			return new DictionaryView(leaf, this);
+		});
+
+		this.registerView(VIEW_TYPE_SPANISH_CHAT, (leaf) => {
+			return new SpanishChatView(leaf, this);
 		});
 
 		this.registerView(VIEW_TYPE_TTS_PRACTICE_VIEW, (leaf) => {
@@ -47,6 +52,12 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			id: "change-llm-model",
 			name: "Change LLM model",
 			callback: () => this.openModelPicker(),
+		});
+
+		this.addCommand({
+			id: "open-spanish-chat",
+			name: "Open Spanish chat",
+			callback: () => this.activateSpanishChatView(),
 		});
 
 		this.addCommand({
@@ -194,6 +205,32 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		// Focus the search input
 		if (leaf && leaf.view instanceof DictionaryView) {
 			leaf.view.focusSearch();
+		}
+	}
+
+	async activateSpanishChatView(initialPrompt?: string) {
+		const { workspace } = this.app;
+
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_SPANISH_CHAT)[0];
+
+		if (!leaf) {
+			const newLeaf = workspace.getLeaf("tab");
+			if (newLeaf) {
+				await newLeaf.setViewState({
+					type: VIEW_TYPE_SPANISH_CHAT,
+					active: true,
+				});
+				leaf = newLeaf;
+			}
+		} else {
+			workspace.revealLeaf(leaf);
+		}
+
+		if (leaf && leaf.view instanceof SpanishChatView) {
+			if (typeof initialPrompt === "string") {
+				leaf.view.setDraftPrompt(initialPrompt);
+			}
+			leaf.view.focusInput();
 		}
 	}
 

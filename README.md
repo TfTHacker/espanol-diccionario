@@ -6,6 +6,12 @@ An Obsidian plugin for learning **Spain (Castilian) Spanish**, featuring:
 - **Offline core** — Type a word → see definition, IPA, part of speech, example sentences
 - **Smart lemmatization** — Conjugated forms (hablamos, están, casas) auto-resolve to the dictionary form
 - **Audio pronunciation** — Google TTS with Castilian Spanish (`es-ES`) pronunciation
+- **Dedicated Spanish chat** — Practice freeform conversation, roleplay, and dialogue generation in a standalone chat view
+- **Chat → TTS handoff** — Send generated assistant dialogue straight into the Spanish TTS practice view
+- **Spanish TTS practice view** — Open a dedicated reader/player for arbitrary Spanish text
+- **Selection playback** — Play only the highlighted portion of practice text when you want to focus on a phrase
+- **Practice history + draft persistence** — Reopen recent listening snippets and keep your in-progress text between sessions
+- **Import note/file text** — Pull Markdown or `.txt` file contents into the practice reader for quick listening drills
 - **AI chat** — Ask grammar questions and get more examples via an OpenAI-compatible LLM (Ollama, OpenAI, Groq, etc.)
 - **Mobile support** — Works on Obsidian mobile (iOS + Android)
 
@@ -73,6 +79,36 @@ Open **Settings → Español Diccionario** to configure:
 3. View definitions, IPA, example sentences
 4. Click 🔊 to hear pronunciation (Spanish words only)
 5. Expand **💬 Chat** to ask the AI about the word or grammar
+
+### Spanish chat
+
+Use the command palette to open **"Español Diccionario: Open Spanish chat"**.
+
+In the dedicated chat view you can:
+
+- practice freeform Spanish conversation without opening the dictionary first
+- tailor a separate **Spanish chat system prompt** in settings
+- ask for roleplays, level-appropriate dialogues, corrections, or slower phrasing
+- reuse recent prompts from the **🕐** prompt history button
+- send any useful assistant reply straight to TTS with **Send to TTS**
+
+This is designed to be the easiest workflow for generating dialogue and immediately practicing it as listening material.
+
+### Spanish TTS practice
+
+Use the command palette to open **"Español Diccionario: Open Spanish TTS practice"**.
+
+In the practice view you can:
+
+- type or paste arbitrary Spanish text
+- press `Ctrl/Cmd+Enter` or click **▶** to play it
+- toggle **🔁** to auto-repeat playback with a short pause between loops
+- select just part of the text to play only that selection
+- reuse recent snippets from the **🕐** history menu
+- import a Markdown or text file with **📄**
+- send selected text from the active Markdown note with **"Send selected text to Spanish TTS practice"**
+
+The practice view keeps the current draft, auto-repeat preference, and a capped history of recent practice snippets in plugin settings, so you can come back to them later.
 
 ### Examples
 

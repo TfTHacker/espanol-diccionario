@@ -3,6 +3,7 @@
 // Plugin identification
 export const PLUGIN_ID = "espanol-diccionario";
 export const VIEW_TYPE_DICTIONARY = "espanol-diccionario-view";
+export const VIEW_TYPE_SPANISH_CHAT = "espanol-diccionario-spanish-chat";
 export const VIEW_TYPE_TTS_PRACTICE = "espanol-diccionario-tts-practice";
 export const VIEW_TYPE_WEB = "espanol-diccionario-web";
 
@@ -14,6 +15,7 @@ export const TYPEAHEAD_DEBOUNCE_MS = 150;
 export const SEARCH_DEBOUNCE_MS = 300;
 export const MARKDOWN_RENDER_DEBOUNCE_MS = 80;
 export const AUDIO_LOAD_TIMEOUT_MS = 8000;
+export const TTS_PRACTICE_REPEAT_DELAY_MS = 1200;
 
 // UI limits
 export const MAX_TYPEAHEAD_RESULTS = 10;

@@ -26,11 +26,25 @@ export function normalizePracticeDraft(input: unknown): string {
 	return typeof input === "string" ? input : "";
 }
 
+export function normalizePracticeAutoRepeat(input: unknown): boolean {
+	return input === true;
+}
+
 export function getPracticePlaybackText(text: string, selectionStart: number, selectionEnd: number): string {
 	if (selectionStart !== selectionEnd) {
 		return text.slice(Math.min(selectionStart, selectionEnd), Math.max(selectionStart, selectionEnd)).trim();
 	}
 	return text.trim();
+}
+
+export function shouldQueuePracticeRepeat(
+	autoRepeat: boolean,
+	requestId: number,
+	activeRequestId: number,
+	chunkIndex: number,
+	chunkCount: number,
+): boolean {
+	return autoRepeat && chunkCount > 0 && requestId === activeRequestId && chunkIndex === chunkCount - 1;
 }
 
 export function insertImportedText(current: string, imported: string, selectionStart: number, selectionEnd: number): string {
