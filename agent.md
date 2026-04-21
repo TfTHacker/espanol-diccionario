@@ -50,6 +50,11 @@ src/
 **Generated artifact note:** `main.js` is release/build output and should not be committed to the repository. Build it locally or in CI when needed.
 **Release workflow:** Read `RELEASING.md` before doing any version bump, tagging, release, or GitHub Actions release recovery work.
 
+**Release commands:** Use the documented release flow from `RELEASING.md` for GitHub releases — run preflight checks, `npm version patch|minor|major`, then push with the authenticated desktop user:
+- `sudo -u kunicki env HOME=/home/kunicki git push origin main`
+- `sudo -u kunicki env HOME=/home/kunicki git push origin <tag>`
+- verify the `Release Obsidian plugin` GitHub Actions run and resulting release assets
+
 ---
 
 ## Key Decisions

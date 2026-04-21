@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "build:db": "node --import tsx scripts/build-db.ts",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
+    "version": "node version-bump.mjs && git add package.json package-lock.json manifest.json versions.json",
+    "postversion": "git tag -d v$npm_package_version 2>/dev/null || true && git tag $npm_package_version HEAD"
   },
   "keywords": [
     "obsidian",

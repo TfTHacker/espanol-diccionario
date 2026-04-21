@@ -45,13 +45,15 @@ Typical commands:
 
 ```bash
 npm version patch
-git push origin main
-git push origin <new-version-tag>
+sudo -u kunicki env HOME=/home/kunicki git push origin main
+sudo -u kunicki env HOME=/home/kunicki git push origin <new-version-tag>
 ```
 
 Notes:
 - `npm version patch|minor|major` updates `package.json` and `package-lock.json`, then runs the `version` script from `package.json`.
-- The repo currently also needs `manifest.json` and `versions.json` aligned with the package version.
+- The repo also keeps `manifest.json` and `versions.json` aligned with the package version during the version script.
+- The `postversion` script converts npm's default `vX.Y.Z` tag into the plain `X.Y.Z` tag expected by this repo's release workflow and existing release history.
+- Push GitHub changes as `kunicki`, because root does not have the GitHub auth used for this repo.
 
 ## Manual release / recovery
 
