@@ -12,6 +12,9 @@ import { VIEW_TYPE_DICTIONARY } from "../constants";
 import { SearchController } from "./search-controller";
 import { NavHistory } from "./nav-history";
 import { ChatController } from "./chat-controller";
+import { buildDefinitionExplanationPrompt, buildExampleExplanationPrompt } from "./dictionary-example-chat-state";
+import { shouldAutoFocusDictionarySearch, shouldBlurDictionarySearchAfterLookup } from "./dictionary-focus-state";
+import { renderFeatureShortcuts } from "./feature-shortcuts";
 
 export { VIEW_TYPE_DICTIONARY as VIEW_TYPE_ESPANOL_DICCIONARIO } from "../constants";
 
@@ -95,6 +98,7 @@ export class DictionaryView extends ItemView {
 		searchBtn.setText("🔍");
 
 		const typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
+		renderFeatureShortcuts(searchDiv, this.plugin, VIEW_TYPE_DICTIONARY);
 
 		// Initialize SearchController
 		this.search.init(searchInput, typeaheadList, searchForm);
@@ -106,8 +110,10 @@ export class DictionaryView extends ItemView {
 		// === Result area ===
 		const resultArea = container.createDiv({ cls: "ed-result-area", attr: { id: "ed-result-area" } });
 
-		// Suggestion links (below definition)
-		this.chatSuggestionsContainer = container.createDiv({ cls: "ed-suggestion-links" });
+		// Suggestion links are rendered inside the active lookup result so they flow
+		// after definitions/examples instead of behaving like a pinned footer block.
+		this.chatSuggestionsContainer = document.createElement("div");
+		this.chatSuggestionsContainer.className = "ed-suggestion-links";
 
 		// Show loading or initial state
 		if (!isDatabaseReady()) {
@@ -123,7 +129,14 @@ export class DictionaryView extends ItemView {
 		// Model label + clear button toolbar
 		const chatToolbar = chatContainer.createDiv({ cls: "ed-chat-toolbar" });
 		const chatModelLabel = chatToolbar.createDiv({ cls: "ed-chat-model-label" });
-		const clearBtn = chatToolbar.createEl("button", { cls: "ed-chat-clear-btn", attr: { type: "button", title: "Clear chat" } });
+		const chatToolbarActions = chatToolbar.createDiv({ cls: "ed-chat-toolbar-actions" });
+		const fontDownBtn = chatToolbarActions.createEl("button", { cls: "ed-chat-font-btn ed-chat-font-down-btn", attr: { type: "button", title: "Decrease chat font size" } });
+		fontDownBtn.setText("A−");
+		const fontUpBtn = chatToolbarActions.createEl("button", { cls: "ed-chat-font-btn ed-chat-font-up-btn", attr: { type: "button", title: "Increase chat font size" } });
+		fontUpBtn.setText("A+");
+		const fullscreenBtn = chatToolbarActions.createEl("button", { cls: "ed-chat-fullscreen-btn", attr: { type: "button", title: "Focus chat" } });
+		fullscreenBtn.setText("⛶");
+		const clearBtn = chatToolbarActions.createEl("button", { cls: "ed-chat-clear-btn", attr: { type: "button", title: "Clear chat" } });
 		clearBtn.setText("\u{1F5D1} Clear");
 		clearBtn.addEventListener("click", () => this.chat.clearChat());
 
@@ -149,7 +162,7 @@ export class DictionaryView extends ItemView {
 		const chatRecentsDropdown = chatSection.createDiv({ cls: "ed-chat-recents-dropdown ed-hidden" });
 
 		// Initialize ChatController
-		this.chat.init(chatContainer, chatInput, chatModelLabel, chatRecentsDropdown, chatToggleBtn, this.chatSuggestionsContainer, chatForm, chatRecentsBtn);
+		this.chat.init(container, chatContainer, chatInput, chatModelLabel, chatRecentsDropdown, chatToggleBtn, fontDownBtn, fontUpBtn, fullscreenBtn, this.chatSuggestionsContainer, chatForm, chatRecentsBtn);
 
 		// Update chat model label
 		this.chat.updateChatModelLabel();
@@ -172,6 +185,10 @@ export class DictionaryView extends ItemView {
 				this.handleExtLink(target.closest(".ed-ext-link") as HTMLElement);
 			} else if (target.closest("[data-action='ask-ai']")) {
 				this.handleAskAi(target.closest("[data-action='ask-ai']") as HTMLElement);
+			} else if (target.closest("[data-action='ask-ai-example']")) {
+				this.handleAskAiExample(target.closest("[data-action='ask-ai-example']") as HTMLElement);
+			} else if (target.closest("[data-action='ask-ai-definition']")) {
+				this.handleAskAiDefinition(target.closest("[data-action='ask-ai-definition']") as HTMLElement);
 			}
 		});
 
@@ -186,8 +203,11 @@ export class DictionaryView extends ItemView {
 			}
 		});
 
-		// Focus search input
-		this.search.focus();
+		// Focus search input on desktop only. On mobile, auto-focusing pops the
+		// software keyboard and obscures the dictionary pane.
+		if (shouldAutoFocusDictionarySearch(Platform.isMobile)) {
+			this.search.focus();
+		}
 	}
 
 	async onClose() {
@@ -196,7 +216,9 @@ export class DictionaryView extends ItemView {
 
 	/** Focus the search input (public, for plugin commands) */
 	public focusSearch() {
-		this.search.focus();
+		if (shouldAutoFocusDictionarySearch(Platform.isMobile)) {
+			this.search.focus();
+		}
 	}
 
 	/** Open the dictionary and look up a word (public, for URI handler / links) */
@@ -204,7 +226,11 @@ export class DictionaryView extends ItemView {
 		this.search.setSearchText(word);
 		this.search.hideTypeahead();
 		this.doLookup(word, true);
-		this.search.focus();
+		if (shouldBlurDictionarySearchAfterLookup(Platform.isMobile)) {
+			this.search.blur();
+		} else {
+			this.search.focus();
+		}
 	}
 
 	/** Update the chat model label (public, called by model-selector) */
@@ -247,6 +273,9 @@ export class DictionaryView extends ItemView {
 			return;
 		}
 		this.doLookup(word, true);
+		if (shouldBlurDictionarySearchAfterLookup(Platform.isMobile)) {
+			this.search.blur();
+		}
 	}
 
 	/** Called by NavHistory when navigating back/forward or selecting a recent word */
@@ -254,6 +283,9 @@ export class DictionaryView extends ItemView {
 		this.search.setSearchText(word);
 		this.search.hideTypeahead();
 		this.doLookup(word, false);
+		if (shouldBlurDictionarySearchAfterLookup(Platform.isMobile)) {
+			this.search.blur();
+		}
 	}
 
 	// ============================================================
@@ -279,6 +311,11 @@ export class DictionaryView extends ItemView {
 			if (result) {
 				this.currentResult = result;
 				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
+
+				const renderedResult = resultArea.querySelector(".ed-result");
+				if (renderedResult) {
+					renderedResult.appendChild(this.chatSuggestionsContainer);
+				}
 
 				// Update chat suggestion chips for this word
 				this.chat.renderChatSuggestions();
@@ -350,6 +387,9 @@ export class DictionaryView extends ItemView {
 		this.search.setSearchText(word);
 		this.search.hideTypeahead();
 		this.doLookup(word, true);
+		if (shouldBlurDictionarySearchAfterLookup(Platform.isMobile)) {
+			this.search.blur();
+		}
 	}
 
 	private persistNavHistory(history: string[]) {
@@ -392,6 +432,37 @@ export class DictionaryView extends ItemView {
 			.replace(/{source}/g, lang === "es" ? "Spanish" : lang === "en" ? "English" : "Spanish")
 			.replace(/{target}/g, lang === "es" ? "English" : lang === "en" ? "Spanish" : "Spanish");
 
+		this.chat.sendChatSuggestion(prompt);
+	}
+
+	private handleAskAiExample(el: HTMLElement | null) {
+		if (!el) return;
+		const sentenceEs = el.dataset.sentenceEs?.trim() || "";
+		const sentenceEn = el.dataset.sentenceEn?.trim() || "";
+		if (!sentenceEs) return;
+
+		if (!this.plugin.settings.llmModel) {
+			new Notice("No LLM model configured. Go to Settings → Español Diccionario → LLM Chat to set up a model.");
+			return;
+		}
+
+		const prompt = buildExampleExplanationPrompt(sentenceEs, sentenceEn);
+		this.chat.sendChatSuggestion(prompt);
+	}
+
+	private handleAskAiDefinition(el: HTMLElement | null) {
+		if (!el) return;
+		const word = el.dataset.word?.trim() || "";
+		const definition = el.dataset.definition?.trim() || "";
+		const context = el.dataset.context?.trim() || "";
+		if (!word || !definition) return;
+
+		if (!this.plugin.settings.llmModel) {
+			new Notice("No LLM model configured. Go to Settings → Español Diccionario → LLM Chat to set up a model.");
+			return;
+		}
+
+		const prompt = buildDefinitionExplanationPrompt(word, definition, context || undefined);
 		this.chat.sendChatSuggestion(prompt);
 	}
 }

@@ -3,6 +3,7 @@
 import { Plugin, Platform, Notice, MarkdownView, type ObsidianProtocolData } from "obsidian";
 import { EspañolDiccionarioSettingTab, normalizeSettings, cloneDefaultSettings, type PluginSettings } from "./settings";
 import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-view";
+import { shouldAutoFocusDictionarySearch } from "./ui/dictionary-focus-state";
 import { SpanishChatView } from "./ui/spanish-chat-view";
 import { TtsPracticeView, VIEW_TYPE_TTS_PRACTICE_VIEW } from "./ui/tts-practice-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
@@ -202,8 +203,9 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			workspace.revealLeaf(leaf);
 		}
 
-		// Focus the search input
-		if (leaf && leaf.view instanceof DictionaryView) {
+		// Focus the search input on desktop only. On mobile, opening the view
+		// should not immediately pop the software keyboard.
+		if (leaf && leaf.view instanceof DictionaryView && shouldAutoFocusDictionarySearch(Platform.isMobile)) {
 			leaf.view.focusSearch();
 		}
 	}

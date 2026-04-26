@@ -47,6 +47,14 @@ export function shouldQueuePracticeRepeat(
 	return autoRepeat && chunkCount > 0 && requestId === activeRequestId && chunkIndex === chunkCount - 1;
 }
 
+export function getPracticePauseButtonLabel(isPaused: boolean): string {
+	return isPaused ? "▶" : "⏸";
+}
+
+export function getPracticePauseButtonTitle(isPaused: boolean): string {
+	return isPaused ? "Resume audio" : "Pause audio";
+}
+
 export function insertImportedText(current: string, imported: string, selectionStart: number, selectionEnd: number): string {
 	if (!imported) return current;
 

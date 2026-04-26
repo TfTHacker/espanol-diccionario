@@ -44,7 +44,7 @@ export function renderResult(result: DictionaryResult, maxSentences: number = 5)
 
 	// Definitions — make definition text clickable based on language
 	if (definitions.length > 0) {
-		parts.push(renderDefinitions(definitions, word.lang));
+		parts.push(renderDefinitions(definitions, word.lang, word.word));
 	}
 
 	// Example sentences — make words clickable
@@ -122,7 +122,7 @@ function renderExternalLinks(word: string, lang: string): string {
  * For Spanish entries: definitions are in English → English words clickable (reverse lookup)
  * For English entries: definitions are Spanish words → Spanish words clickable (drill down)
  */
-function renderDefinitions(definitions: Definition[], lang: string): string {
+function renderDefinitions(definitions: Definition[], lang: string, word: string): string {
 	const items = definitions.map((def, i) => {
 		const num = def.senseNum || (i + 1);
 		const defHtml = lang === "en"
@@ -148,13 +148,29 @@ function renderDefinitions(definitions: Definition[], lang: string): string {
 		if (def.context) {
 			html += ` <span class="ed-def-context">(${escapeHtml(def.context)})</span>`;
 		}
-		return `<li class="ed-def-item">${html}</li>`;
+		const iconHtml = renderDefinitionChatLink(word, def.definition, def.context ?? undefined);
+		return `<li class="ed-def-item"><div class="ed-def-row"><div class="ed-def-body">${html}${iconHtml}</div></div></li>`;
 	}).join("");
 
 	return `<div class="ed-definitions">
 		<div class="ed-section-title">Definitions</div>
 		<ol class="ed-def-list">${items}</ol>
 	</div>`;
+}
+
+function renderDefinitionChatLink(word: string, definition: string, context?: string): string {
+	const attrs = [
+		'class="ed-definition-chat-link"',
+		'data-action="ask-ai-definition"',
+		`data-word="${escapeHtml(word)}"`,
+		`data-definition="${escapeHtml(definition)}"`,
+		'title="Explore this translation in chat"',
+		'aria-label="Explore this translation in chat"',
+	];
+	if (context?.trim()) {
+		attrs.push(`data-context="${escapeHtml(context)}"`);
+	}
+	return `<a ${attrs.join(" ")} role="button" tabindex="0">💬</a>`;
 }
 
 const ENGLISH_SKIP_WORDS = new Set(["the","and","that","this","with","from","for","not","but","who","whom","whose","which","what","where","when","how","than","then","also","very","much","more","most","some","such","only","own","same","will","shall","may","might","can","could","would","should","has","have","had","been","being","does","did","done","made","make","like","just","over","into","also","back","because","through","between","before","after","while","during","without","within","about","above","below","under","these","those","other","another","each","every","both","few","many","several","there","here","where","when","why","still","even","too","yet","nor","either","neither","though","although","except","since","until","upon"]);
@@ -216,20 +232,35 @@ function makeEnglishDefClickable(text: string): string {
  */
 function renderSentences(sentences: Sentence[]): string {
 	const items = sentences.map((s) => {
-		let html = "";
+		let bodyHtml = "";
 		if (s.sentenceEs) {
-			html += `<div class="ed-sentence-es">${makeSentenceClickable(s.sentenceEs, "es")}</div>`;
+			const iconHtml = renderExampleChatLink(s.sentenceEs, s.sentenceEn ?? undefined);
+			bodyHtml += `<div class="ed-sentence-es-line"><div class="ed-sentence-es">${makeSentenceClickable(s.sentenceEs, "es")}</div>${iconHtml}</div>`;
 		}
 		if (s.sentenceEn) {
-			html += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentenceEn, "en")}</div>`;
+			bodyHtml += `<div class="ed-sentence-en">${makeSentenceClickable(s.sentenceEn, "en")}</div>`;
 		}
-		return `<li class="ed-sentence-item">${html}</li>`;
+		return `<li class="ed-sentence-item"><div class="ed-sentence-row"><div class="ed-sentence-body">${bodyHtml}</div></div></li>`;
 	}).join("");
 
 	return `<div class="ed-sentences">
 		<div class="ed-section-title">Example Sentences</div>
 		<ul class="ed-sentence-list">${items}</ul>
 	</div>`;
+}
+
+function renderExampleChatLink(sentenceEs: string, sentenceEn?: string): string {
+	const attrs = [
+		'class="ed-example-chat-link"',
+		'data-action="ask-ai-example"',
+		`data-sentence-es="${escapeHtml(sentenceEs)}"`,
+		'title="Explain this example in chat"',
+		'aria-label="Explain this example in chat"',
+	];
+	if (sentenceEn?.trim()) {
+		attrs.push(`data-sentence-en="${escapeHtml(sentenceEn)}"`);
+	}
+	return `<a ${attrs.join(" ")} role="button" tabindex="0">💬</a>`;
 }
 
 /**

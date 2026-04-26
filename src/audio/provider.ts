@@ -3,6 +3,7 @@
 import { AUDIO_LOAD_TIMEOUT_MS } from "../constants";
 
 const GOOGLE_TTS_MAX_CHARS = 180;
+const TTS_IGNORED_SPAN_PATTERN = /(\-\-|—|–)([^\n]*?)\1/g;
 
 /**
  * Get the Google TTS URL for a Spanish word.
@@ -12,12 +13,15 @@ export function getSpanishTtsUrl(text: string): string {
 	return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=es-ES&client=tw-ob`;
 }
 
-export function splitSpanishTtsText(text: string, maxChars = GOOGLE_TTS_MAX_CHARS): string[] {
-	const trimmed = text.trim();
-	if (!trimmed) return [];
-	if (trimmed.length <= maxChars) return [trimmed];
+export function stripIgnoredSpanishTtsText(text: string): string {
+	return text.replace(TTS_IGNORED_SPAN_PATTERN, "");
+}
 
-	const normalized = trimmed.replace(/\s+/g, " ");
+function chunkNormalizedSpan(text: string, maxChars: number): string[] {
+	const normalized = text.trim().replace(/\s+/g, " ");
+	if (!normalized) return [];
+	if (normalized.length <= maxChars) return [normalized];
+
 	const segments = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [normalized];
 	const chunks: string[] = [];
 	let current = "";
@@ -71,6 +75,20 @@ export function splitSpanishTtsText(text: string, maxChars = GOOGLE_TTS_MAX_CHAR
 
 	flushCurrent();
 	return chunks;
+}
+
+export function splitSpanishTtsText(text: string, maxChars = GOOGLE_TTS_MAX_CHARS): string[] {
+	const cleaned = stripIgnoredSpanishTtsText(text).replace(/\r/g, "").trim();
+	if (!cleaned) return [];
+
+	const spans = cleaned
+		.split(/\n+/)
+		.map((span) => span.trim())
+		.filter((span) => span.length > 0);
+
+	if (spans.length === 0) return [];
+
+	return spans.flatMap((span) => chunkNormalizedSpan(span, maxChars));
 }
 
 /**

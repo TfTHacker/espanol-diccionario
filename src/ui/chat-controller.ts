@@ -6,6 +6,9 @@ import type { ChatMessage } from "../chat/provider";
 import type { DictionaryResult } from "../dictionary/data";
 import type { PluginSettings } from "../settings";
 import { MAX_CHAT_PROMPT_HISTORY, MARKDOWN_RENDER_DEBOUNCE_MS } from "../constants";
+import { scrollMessageTopIntoView } from "./chat-scroll-state";
+import { adjustChatFontSize, normalizeChatFontSize } from "./chat-font-size-state";
+import { buildChatFollowUpSuggestions } from "./chat-follow-up-state";
 
 /**
  * Manages the LLM chat panel within the dictionary view.
@@ -15,13 +18,18 @@ export class ChatController {
 	private messages: ChatMessage[] = [];
 	private chatInput!: HTMLInputElement;
 	private chatContainer!: HTMLElement;
+	private hostContainer!: HTMLElement;
 	private chatModelLabel!: HTMLElement;
 	private chatHistoryIndex = -1; // -1 means not navigating history
 	private chatRecentsDropdown!: HTMLElement;
 	private chatInputBeforeHistory = "";
 	private chatToggleBtn!: HTMLButtonElement;
+	private chatFontDownBtn!: HTMLButtonElement;
+	private chatFontUpBtn!: HTMLButtonElement;
+	private chatFullscreenBtn!: HTMLButtonElement;
 	private chatSuggestionsContainer!: HTMLElement;
 	private isStreaming = false;
+	private isFullscreen = false;
 
 	// References needed from the view
 	private app: App;
@@ -46,20 +54,28 @@ export class ChatController {
 
 	/** Initialize UI element references (called once from onOpen) */
 	init(
+		hostContainer: HTMLElement,
 		chatContainer: HTMLElement,
 		chatInput: HTMLInputElement,
 		chatModelLabel: HTMLElement,
 		chatRecentsDropdown: HTMLElement,
 		chatToggleBtn: HTMLButtonElement,
+		chatFontDownBtn: HTMLButtonElement,
+		chatFontUpBtn: HTMLButtonElement,
+		chatFullscreenBtn: HTMLButtonElement,
 		chatSuggestionsContainer: HTMLElement,
 		chatForm: HTMLFormElement,
 		chatRecentsBtn: HTMLButtonElement,
 	) {
+		this.hostContainer = hostContainer;
 		this.chatContainer = chatContainer;
 		this.chatInput = chatInput;
 		this.chatModelLabel = chatModelLabel;
 		this.chatRecentsDropdown = chatRecentsDropdown;
 		this.chatToggleBtn = chatToggleBtn;
+		this.chatFontDownBtn = chatFontDownBtn;
+		this.chatFontUpBtn = chatFontUpBtn;
+		this.chatFullscreenBtn = chatFullscreenBtn;
 		this.chatSuggestionsContainer = chatSuggestionsContainer;
 
 		// Arrow key navigation for prompt history
@@ -79,6 +95,30 @@ export class ChatController {
 			evt.stopPropagation();
 			this.toggleChatRecents();
 		});
+
+		this.chatFontDownBtn.addEventListener("click", (evt) => {
+			evt.stopPropagation();
+			void this.adjustChatFont(-1);
+		});
+
+		this.chatFontUpBtn.addEventListener("click", (evt) => {
+			evt.stopPropagation();
+			void this.adjustChatFont(1);
+		});
+
+		this.chatFullscreenBtn.addEventListener("click", (evt) => {
+			evt.stopPropagation();
+			this.toggleFullscreen();
+		});
+
+		this.chatContainer.addEventListener("keydown", (evt) => {
+			if (evt.key === "Escape" && this.isFullscreen) {
+				evt.preventDefault();
+				this.setFullscreen(false);
+			}
+		});
+
+		this.applyChatFontSize();
 	}
 
 	toggleChat() {
@@ -87,10 +127,12 @@ export class ChatController {
 		if (this.chatToggleBtn) {
 			this.chatToggleBtn.classList.toggle("ed-nav-btn-active", !isHidden);
 		}
-		if (!isHidden) {
-			this.updateChatModelLabel();
-			this.chatInput.focus();
+		if (isHidden) {
+			this.setFullscreen(false);
+			return;
 		}
+		this.updateChatModelLabel();
+		this.chatInput.focus();
 	}
 
 	updateChatModelLabel() {
@@ -99,6 +141,7 @@ export class ChatController {
 		const model = settings.llmModel || "(no model)";
 		const server = settings.llmServerUrl.replace(/\/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
 		this.chatModelLabel.textContent = `Model: ${model} · ${server}`;
+		this.updateFontButtons();
 	}
 
 	clearChat() {
@@ -106,6 +149,52 @@ export class ChatController {
 		const messagesContainer = this.chatContainer.querySelector("#ed-chat-messages");
 		if (messagesContainer) {
 			messagesContainer.empty();
+		}
+	}
+
+	private async adjustChatFont(delta: number) {
+		const settings = this.settings();
+		settings.chatFontSize = adjustChatFontSize(settings.chatFontSize, delta);
+		this.applyChatFontSize();
+		await this.saveSettings();
+	}
+
+	private applyChatFontSize() {
+		const fontSize = normalizeChatFontSize(this.settings().chatFontSize);
+		this.chatContainer?.style.setProperty("--ed-chat-font-size", `${fontSize}px`);
+		this.updateFontButtons();
+	}
+
+	private updateFontButtons() {
+		const fontSize = normalizeChatFontSize(this.settings().chatFontSize);
+		if (this.chatFontDownBtn) {
+			this.chatFontDownBtn.setAttribute("title", `Decrease chat font size (${fontSize}px)`);
+		}
+		if (this.chatFontUpBtn) {
+			this.chatFontUpBtn.setAttribute("title", `Increase chat font size (${fontSize}px)`);
+		}
+	}
+
+	toggleFullscreen() {
+		this.setFullscreen(!this.isFullscreen);
+	}
+
+	private setFullscreen(enabled: boolean) {
+		this.isFullscreen = enabled;
+		this.hostContainer?.classList.toggle("ed-chat-fullscreen-active", enabled);
+		this.chatFullscreenBtn?.classList.toggle("ed-chat-fullscreen-btn-active", enabled);
+		if (this.chatFullscreenBtn) {
+			this.chatFullscreenBtn.setText(enabled ? "🗗" : "⛶");
+			this.chatFullscreenBtn.setAttribute("title", enabled ? "Exit focused chat" : "Focus chat");
+			this.chatFullscreenBtn.setAttribute("aria-label", enabled ? "Exit focused chat" : "Focus chat");
+		}
+		if (enabled) {
+			this.hideChatRecents();
+			this.chatInput?.blur();
+			const activeElement = document.activeElement;
+			if (activeElement instanceof HTMLElement) {
+				activeElement.blur();
+			}
 		}
 	}
 
@@ -302,9 +391,9 @@ export class ChatController {
 		assistantDiv.textContent = "Thinking...";
 		messagesContainer?.appendChild(assistantDiv);
 
-		// Scroll to bottom
+		// Scroll to show the start of the assistant bubble, not the bottom.
 		if (messagesContainer) {
-			messagesContainer.scrollTop = messagesContainer.scrollHeight;
+			this.scrollAssistantMessageToTop(messagesContainer as HTMLElement, assistantDiv);
 		}
 
 		// Stream response
@@ -313,16 +402,18 @@ export class ChatController {
 		const wordContext = this.buildWordContext();
 		let renderTimeout: ReturnType<typeof setTimeout> | null = null;
 
-		const renderMarkdown = () => {
+		const renderMarkdown = async () => {
 			const md = accumulated;
 			const container = assistantDiv;
 			container.empty();
-			MarkdownRenderer.render(this.app, md, container, "", this.component);
+			await MarkdownRenderer.render(this.app, md, container, "", this.component);
 		};
 
 		const debouncedRender = () => {
 			if (renderTimeout) clearTimeout(renderTimeout);
-			renderTimeout = setTimeout(renderMarkdown, MARKDOWN_RENDER_DEBOUNCE_MS);
+			renderTimeout = setTimeout(() => {
+				void renderMarkdown();
+			}, MARKDOWN_RENDER_DEBOUNCE_MS);
 		};
 
 		const response = await streamChatMessage(
@@ -332,7 +423,7 @@ export class ChatController {
 				accumulated += text;
 				assistantDiv.textContent = accumulated;
 				if (messagesContainer) {
-					messagesContainer.scrollTop = messagesContainer.scrollHeight;
+					this.scrollAssistantMessageToTop(messagesContainer as HTMLElement, assistantDiv);
 				}
 				debouncedRender();
 			},
@@ -348,7 +439,12 @@ export class ChatController {
 		} else {
 			this.messages.push({ role: "assistant", content: response.message });
 			// Final markdown render
-			renderMarkdown();
+			await renderMarkdown();
+			this.appendFollowUpSuggestions(assistantDiv, response.message);
+		}
+
+		if (messagesContainer) {
+			this.scrollAssistantMessageToTop(messagesContainer as HTMLElement, assistantDiv);
 		}
 
 		this.isStreaming = false;
@@ -357,5 +453,35 @@ export class ChatController {
 	/** Hide chat recents dropdown */
 	hideChatRecents() {
 		this.chatRecentsDropdown?.classList.add("ed-hidden");
+	}
+
+	private scrollAssistantMessageToTop(messagesContainer: HTMLElement, assistantEl: HTMLElement) {
+		scrollMessageTopIntoView(messagesContainer, assistantEl);
+	}
+
+	private appendFollowUpSuggestions(assistantDiv: HTMLElement, assistantMarkdown: string) {
+		const result = this.currentResult();
+		const suggestions = buildChatFollowUpSuggestions(assistantMarkdown, {
+			word: result?.word.word,
+			lang: result?.word.lang,
+			pos: result?.word.pos,
+			definitions: result?.definitions.map((definition) => definition.definition),
+		});
+		if (suggestions.length === 0) return;
+
+		const followUps = assistantDiv.createDiv({ cls: "ed-chat-followups" });
+		followUps.createEl("span", { cls: "ed-chat-followups-label", text: "Continue:" });
+
+		for (const suggestion of suggestions) {
+			const link = followUps.createEl("a", {
+				cls: "ed-chat-followup-link",
+				text: suggestion,
+			});
+			link.href = "#";
+			link.addEventListener("click", (evt) => {
+				evt.preventDefault();
+				this.sendChatSuggestion(suggestion);
+			});
+		}
 	}
 }

@@ -2,9 +2,11 @@ import { FuzzySuggestModal, ItemView, Notice, TFile, WorkspaceLeaf } from "obsid
 
 import type EspañolDiccionarioPlugin from "../main";
 import { playSpanishAudio, splitSpanishTtsText } from "../audio/provider";
-import { MAX_TTS_PRACTICE_HISTORY, TTS_PRACTICE_REPEAT_DELAY_MS, VIEW_TYPE_TTS_PRACTICE as VIEW_TYPE_TTS_PRACTICE_CONST } from "../constants";
+import { MAX_TTS_PRACTICE_HISTORY, TTS_PRACTICE_CHUNK_PAUSE_MS, TTS_PRACTICE_REPEAT_DELAY_MS, VIEW_TYPE_TTS_PRACTICE as VIEW_TYPE_TTS_PRACTICE_CONST } from "../constants";
 import {
 	getPracticePlaybackText,
+	getPracticePauseButtonLabel,
+	getPracticePauseButtonTitle,
 	insertImportedText,
 	normalizePracticeAutoRepeat,
 	normalizePracticeDraft,
@@ -12,6 +14,7 @@ import {
 	sanitizePracticeHistory,
 	shouldQueuePracticeRepeat,
 } from "./tts-practice-state";
+import { renderFeatureShortcuts } from "./feature-shortcuts";
 
 export const VIEW_TYPE_TTS_PRACTICE_VIEW = VIEW_TYPE_TTS_PRACTICE_CONST;
 
@@ -22,12 +25,14 @@ export class TtsPracticeView extends ItemView {
 	private draftSaveTimer: number | null = null;
 	private playRequestId = 0;
 	private playInFlight = false;
+	private isPaused = false;
 	private autoRepeat = false;
 	private repeatTimer: number | null = null;
 	private textAreaEl!: HTMLTextAreaElement;
 	private historyDropdownEl!: HTMLElement;
 	private historyBtnEl!: HTMLButtonElement;
 	private playBtnEl!: HTMLButtonElement;
+	private pauseBtnEl!: HTMLButtonElement;
 	private stopBtnEl!: HTMLButtonElement;
 	private repeatBtnEl!: HTMLButtonElement;
 	private statusEl!: HTMLElement;
@@ -64,6 +69,13 @@ export class TtsPracticeView extends ItemView {
 		this.playBtnEl.setText("▶");
 		this.playBtnEl.addEventListener("click", () => {
 			void this.handlePlay();
+		});
+
+		this.pauseBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-pause-btn", attr: { type: "button", title: "Pause audio" } });
+		this.pauseBtnEl.setText("⏸");
+		this.pauseBtnEl.disabled = true;
+		this.pauseBtnEl.addEventListener("click", () => {
+			void this.togglePause();
 		});
 
 		this.stopBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-stop-btn", attr: { type: "button", title: "Stop audio" } });
@@ -113,6 +125,7 @@ export class TtsPracticeView extends ItemView {
 		insertFileBtn.addEventListener("click", () => this.openFilePicker());
 
 		this.historyDropdownEl = toolbar.createDiv({ cls: "ed-recents ed-tts-history-dropdown ed-hidden" });
+		renderFeatureShortcuts(toolbar, this.plugin, VIEW_TYPE_TTS_PRACTICE_VIEW);
 
 		this.textAreaEl = container.createEl("textarea", {
 			cls: "ed-tts-textarea",
@@ -135,7 +148,7 @@ export class TtsPracticeView extends ItemView {
 		this.statusEl = container.createDiv({ cls: "ed-tts-status" });
 		container.createDiv({
 			cls: "ed-tts-privacy-note",
-			text: "Audio uses Google TTS, so entered text is sent to Google for playback.",
+			text: "Audio uses Google TTS, so entered text is sent to Google for playback. Wrap notes in --double dashes-- or —em dashes— to skip them during playback.",
 		});
 		this.setStatus("Ready.");
 
@@ -186,6 +199,8 @@ export class TtsPracticeView extends ItemView {
 		const requestId = ++this.playRequestId;
 		this.playInFlight = true;
 		this.playBtnEl.disabled = true;
+		this.isPaused = false;
+		this.syncPauseButton();
 		this.stopBtnEl.disabled = false;
 		this.setStatus("Loading audio…");
 
@@ -198,6 +213,8 @@ export class TtsPracticeView extends ItemView {
 		if (chunks.length === 0) {
 			this.playInFlight = false;
 			this.playBtnEl.disabled = false;
+			this.isPaused = false;
+			this.syncPauseButton();
 			this.stopBtnEl.disabled = true;
 			this.setStatus("Add some text first.");
 			return;
@@ -222,6 +239,8 @@ export class TtsPracticeView extends ItemView {
 		this.playInFlight = false;
 		if (!audioEl) {
 			this.playBtnEl.disabled = false;
+			this.isPaused = false;
+			this.syncPauseButton();
 			this.stopBtnEl.disabled = true;
 			this.setStatus("Audio failed to load.");
 			new Notice("Failed to play Spanish audio. Check your internet connection.");
@@ -229,6 +248,8 @@ export class TtsPracticeView extends ItemView {
 		}
 
 		this.currentAudio = audioEl;
+		this.isPaused = false;
+		this.syncPauseButton();
 		const isMultiChunk = chunks.length > 1;
 		this.setStatus(isMultiChunk ? `Playing audio… (${chunkIndex + 1}/${chunks.length})` : "Playing audio…");
 		this.historyBtnEl.disabled = this.history.length === 0;
@@ -236,9 +257,13 @@ export class TtsPracticeView extends ItemView {
 		audioEl.addEventListener("ended", () => {
 			if (this.currentAudio !== audioEl) return;
 			this.currentAudio = null;
+			this.isPaused = false;
+			this.syncPauseButton();
 			if (chunkIndex < chunks.length - 1) {
 				this.playInFlight = true;
-				void this.playChunks(chunks, requestId, chunkIndex + 1);
+				window.setTimeout(() => {
+					void this.playChunks(chunks, requestId, chunkIndex + 1);
+				}, TTS_PRACTICE_CHUNK_PAUSE_MS);
 				return;
 			}
 			if (shouldQueuePracticeRepeat(this.autoRepeat, requestId, this.playRequestId, chunkIndex, chunks.length)) {
@@ -247,6 +272,8 @@ export class TtsPracticeView extends ItemView {
 				return;
 			}
 			this.playBtnEl.disabled = false;
+			this.isPaused = false;
+			this.syncPauseButton();
 			this.stopBtnEl.disabled = true;
 			this.setStatus("Playback finished.");
 		}, { once: true });
@@ -254,10 +281,34 @@ export class TtsPracticeView extends ItemView {
 		audioEl.addEventListener("error", () => {
 			if (this.currentAudio !== audioEl) return;
 			this.currentAudio = null;
+			this.isPaused = false;
+			this.syncPauseButton();
 			this.playBtnEl.disabled = false;
 			this.stopBtnEl.disabled = true;
 			this.setStatus("Audio playback failed.");
 		}, { once: true });
+	}
+
+	private async togglePause() {
+		if (!this.currentAudio) return;
+
+		if (this.isPaused) {
+			try {
+				await this.currentAudio.play();
+				this.isPaused = false;
+				this.syncPauseButton();
+				this.setStatus("Playing audio…");
+			} catch (err) {
+				console.warn("[español-diccionario] Audio resume failed:", err);
+				this.setStatus("Audio resume failed.");
+			}
+			return;
+		}
+
+		this.currentAudio.pause();
+		this.isPaused = true;
+		this.syncPauseButton();
+		this.setStatus("Paused.");
 	}
 
 	private handleStop(status = "") {
@@ -271,7 +322,9 @@ export class TtsPracticeView extends ItemView {
 			this.currentAudio.load();
 			this.currentAudio = null;
 		}
+		this.isPaused = false;
 		if (this.playBtnEl) this.playBtnEl.disabled = false;
+		this.syncPauseButton();
 		if (this.stopBtnEl) this.stopBtnEl.disabled = true;
 		if (status) this.setStatus(status);
 	}
@@ -282,6 +335,8 @@ export class TtsPracticeView extends ItemView {
 			this.repeatTimer = null;
 			if (!this.autoRepeat || requestId !== this.playRequestId) {
 				this.playBtnEl.disabled = false;
+				this.isPaused = false;
+				this.syncPauseButton();
 				this.stopBtnEl.disabled = true;
 				this.setStatus("Playback finished.");
 				return;
@@ -322,6 +377,16 @@ export class TtsPracticeView extends ItemView {
 		this.repeatBtnEl?.classList.toggle("ed-nav-btn-active", this.autoRepeat);
 		this.repeatBtnEl?.setAttribute("aria-pressed", this.autoRepeat ? "true" : "false");
 		this.repeatBtnEl?.setAttribute("title", this.autoRepeat ? "Auto-repeat playback: on" : "Auto-repeat playback: off");
+	}
+
+	private syncPauseButton() {
+		if (!this.pauseBtnEl) return;
+		this.pauseBtnEl.disabled = !this.currentAudio;
+		this.pauseBtnEl.setText(getPracticePauseButtonLabel(this.isPaused));
+		this.pauseBtnEl.setAttribute("title", getPracticePauseButtonTitle(this.isPaused));
+		this.pauseBtnEl.setAttribute("aria-label", getPracticePauseButtonTitle(this.isPaused));
+		this.pauseBtnEl.setAttribute("aria-pressed", this.isPaused ? "true" : "false");
+		this.pauseBtnEl.classList.toggle("ed-nav-btn-active", this.isPaused);
 	}
 
 	private toggleHistory() {

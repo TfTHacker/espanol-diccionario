@@ -3,7 +3,10 @@ import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from "obsidian";
 import type EspañolDiccionarioPlugin from "../main";
 import { streamChatMessage, type ChatMessage } from "../chat/provider";
 import { MARKDOWN_RENDER_DEBOUNCE_MS, MAX_CHAT_PROMPT_HISTORY, VIEW_TYPE_SPANISH_CHAT } from "../constants";
-import { DEFAULT_SPANISH_CHAT_STARTERS, assistantMessageToPracticeText } from "./spanish-chat-state";
+import { DEFAULT_SPANISH_CHAT_STARTERS, assistantMessageToPracticeText, shouldSubmitSpanishChatPrompt } from "./spanish-chat-state";
+import { scrollMessageTopIntoView } from "./chat-scroll-state";
+import { adjustChatFontSize, normalizeChatFontSize } from "./chat-font-size-state";
+import { renderFeatureShortcuts } from "./feature-shortcuts";
 
 export class SpanishChatView extends ItemView {
 	private plugin: EspañolDiccionarioPlugin;
@@ -13,12 +16,15 @@ export class SpanishChatView extends ItemView {
 	private promptInputBeforeHistory = "";
 
 	private messagesEl!: HTMLElement;
-	private inputEl!: HTMLInputElement;
+	private inputEl!: HTMLTextAreaElement;
+	private chatContainerEl!: HTMLElement;
 	private modelLabelEl!: HTMLElement;
 	private recentsDropdownEl!: HTMLElement;
 	private emptyStateEl!: HTMLElement;
 	private clearBtnEl!: HTMLButtonElement;
 	private recentsBtnEl!: HTMLButtonElement;
+	private fontDownBtnEl!: HTMLButtonElement;
+	private fontUpBtnEl!: HTMLButtonElement;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
 		super(leaf);
@@ -51,6 +57,7 @@ export class SpanishChatView extends ItemView {
 
 		const chatSection = container.createDiv({ cls: "ed-chat-section ed-spanish-chat-section" });
 		const chatContainer = chatSection.createDiv({ cls: "ed-chat-container ed-spanish-chat-container" });
+		this.chatContainerEl = chatContainer;
 
 		const toolbar = chatContainer.createDiv({ cls: "ed-chat-toolbar ed-spanish-chat-toolbar" });
 		this.modelLabelEl = toolbar.createDiv({ cls: "ed-chat-model-label" });
@@ -66,12 +73,31 @@ export class SpanishChatView extends ItemView {
 			this.togglePromptHistory();
 		});
 
+		this.fontDownBtnEl = toolbarActions.createEl("button", {
+			cls: "ed-chat-font-btn ed-chat-font-down-btn",
+			attr: { type: "button", title: "Decrease chat font size" },
+		});
+		this.fontDownBtnEl.setText("A−");
+		this.fontDownBtnEl.addEventListener("click", () => {
+			void this.adjustChatFont(-1);
+		});
+
+		this.fontUpBtnEl = toolbarActions.createEl("button", {
+			cls: "ed-chat-font-btn ed-chat-font-up-btn",
+			attr: { type: "button", title: "Increase chat font size" },
+		});
+		this.fontUpBtnEl.setText("A+");
+		this.fontUpBtnEl.addEventListener("click", () => {
+			void this.adjustChatFont(1);
+		});
+
 		this.clearBtnEl = toolbarActions.createEl("button", {
 			cls: "ed-chat-clear-btn",
 			attr: { type: "button", title: "Clear conversation" },
 		});
 		this.clearBtnEl.setText("🗑 Clear");
 		this.clearBtnEl.addEventListener("click", () => this.clearConversation());
+		renderFeatureShortcuts(toolbarActions, this.plugin, VIEW_TYPE_SPANISH_CHAT);
 
 		this.emptyStateEl = chatContainer.createDiv({ cls: "ed-spanish-chat-empty-state" });
 		this.emptyStateEl.createDiv({
@@ -91,15 +117,22 @@ export class SpanishChatView extends ItemView {
 		this.messagesEl = chatContainer.createDiv({ cls: "ed-chat-messages ed-spanish-chat-messages" });
 
 		const form = chatContainer.createEl("form", { cls: "ed-chat-form ed-spanish-chat-form" });
-		this.inputEl = form.createEl("input", {
-			type: "text",
+		this.inputEl = form.createEl("textarea", {
 			cls: "ed-chat-input ed-spanish-chat-input",
-			attr: { placeholder: "Practice a Spanish conversation, ask for corrections, or generate dialogue..." },
+			attr: {
+				placeholder: "Practice a Spanish conversation, ask for corrections, or generate dialogue...",
+				rows: "3",
+			},
 		});
 		this.inputEl.addEventListener("keydown", (evt) => {
 			if (evt.key === "ArrowUp" || evt.key === "ArrowDown") {
 				evt.preventDefault();
 				this.navigatePromptHistory(evt.key === "ArrowUp" ? -1 : 1);
+				return;
+			}
+			if (shouldSubmitSpanishChatPrompt(evt)) {
+				evt.preventDefault();
+				void this.sendCurrentInput();
 			}
 		});
 
@@ -120,6 +153,7 @@ export class SpanishChatView extends ItemView {
 		});
 
 		this.updateModelLabel();
+		this.applyChatFontSize();
 		this.syncEmptyState();
 		this.inputEl.focus();
 	}
@@ -143,6 +177,7 @@ export class SpanishChatView extends ItemView {
 		const model = settings.llmModel || "(no model)";
 		const server = settings.llmServerUrl.replace(/\/+$/, "").replace(/^https?:\/\//, "").split("/")[0];
 		this.modelLabelEl.setText(`Model: ${model} · ${server}`);
+		this.updateFontButtons();
 	}
 
 	private syncEmptyState() {
@@ -155,6 +190,24 @@ export class SpanishChatView extends ItemView {
 		this.messages = [];
 		this.messagesEl?.empty();
 		this.syncEmptyState();
+	}
+
+	private async adjustChatFont(delta: number) {
+		this.plugin.settings.chatFontSize = adjustChatFontSize(this.plugin.settings.chatFontSize, delta);
+		this.applyChatFontSize();
+		await this.plugin.saveSettings();
+	}
+
+	private applyChatFontSize() {
+		const fontSize = normalizeChatFontSize(this.plugin.settings.chatFontSize);
+		this.chatContainerEl?.style.setProperty("--ed-chat-font-size", `${fontSize}px`);
+		this.updateFontButtons();
+	}
+
+	private updateFontButtons() {
+		const fontSize = normalizeChatFontSize(this.plugin.settings.chatFontSize);
+		this.fontDownBtnEl?.setAttribute("title", `Decrease chat font size (${fontSize}px)`);
+		this.fontUpBtnEl?.setAttribute("title", `Increase chat font size (${fontSize}px)`);
 	}
 
 	private async sendPrompt(prompt: string) {
@@ -196,7 +249,7 @@ export class SpanishChatView extends ItemView {
 			(text) => {
 				accumulated += text;
 				assistantShell.contentEl.setText(accumulated);
-				this.scrollMessagesToBottom();
+				this.scrollAssistantMessageToTop(assistantShell.messageEl);
 				debouncedRender();
 			},
 		);
@@ -214,7 +267,7 @@ export class SpanishChatView extends ItemView {
 		}
 
 		this.isStreaming = false;
-		this.scrollMessagesToBottom();
+		this.scrollAssistantMessageToTop(assistantShell.messageEl);
 	}
 
 	private appendUserMessage(text: string) {
@@ -228,7 +281,7 @@ export class SpanishChatView extends ItemView {
 		const contentEl = wrapperEl.createDiv({ cls: "ed-spanish-chat-assistant-content" });
 		contentEl.setText("Thinking...");
 		const actionsEl = wrapperEl.createDiv({ cls: "ed-spanish-chat-message-actions" });
-		this.scrollMessagesToBottom();
+		this.scrollAssistantMessageToTop(wrapperEl);
 		return { messageEl: wrapperEl, contentEl, actionsEl };
 	}
 
@@ -325,5 +378,10 @@ export class SpanishChatView extends ItemView {
 	private scrollMessagesToBottom() {
 		if (!this.messagesEl) return;
 		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+	}
+
+	private scrollAssistantMessageToTop(messageEl: HTMLElement) {
+		if (!this.messagesEl) return;
+		scrollMessageTopIntoView(this.messagesEl, messageEl);
 	}
 }

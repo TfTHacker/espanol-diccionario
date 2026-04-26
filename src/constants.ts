@@ -15,6 +15,7 @@ export const TYPEAHEAD_DEBOUNCE_MS = 150;
 export const SEARCH_DEBOUNCE_MS = 300;
 export const MARKDOWN_RENDER_DEBOUNCE_MS = 80;
 export const AUDIO_LOAD_TIMEOUT_MS = 8000;
+export const TTS_PRACTICE_CHUNK_PAUSE_MS = 350;
 export const TTS_PRACTICE_REPEAT_DELAY_MS = 1200;
 
 // UI limits

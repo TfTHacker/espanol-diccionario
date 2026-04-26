@@ -87,6 +87,13 @@ export class SearchController {
 		}
 	}
 
+	/** Blur the search input to dismiss the mobile keyboard after navigation */
+	blur() {
+		if (this.searchInput) {
+			this.searchInput.blur();
+		}
+	}
+
 	/** Clean up pending timeouts */
 	cleanup() {
 		if (this.typeaheadTimeout) clearTimeout(this.typeaheadTimeout);

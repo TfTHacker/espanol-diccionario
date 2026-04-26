@@ -7,6 +7,8 @@ import {
 	normalizePracticeDraft,
 	normalizePracticeAutoRepeat,
 	getPracticePlaybackText,
+	getPracticePauseButtonLabel,
+	getPracticePauseButtonTitle,
 	insertImportedText,
 	shouldQueuePracticeRepeat,
 } from "../src/ui/tts-practice-state";
@@ -45,8 +47,17 @@ test("normalizePracticeAutoRepeat accepts only boolean true and falls back to fa
 	assert.equal(normalizePracticeAutoRepeat(undefined), false);
 });
 
-test("splitSpanishTtsText keeps short text in one chunk", () => {
+test("splitSpanishTtsText keeps short single-line text in one chunk", () => {
 	assert.deepEqual(splitSpanishTtsText("Hola. Qué tal?", 50), ["Hola. Qué tal?"]);
+});
+
+test("splitSpanishTtsText keeps line-break-separated sentences in separate chunks for paced playback", () => {
+	assert.deepEqual(splitSpanishTtsText("Hola amigo\n¿Cómo estás?", 50), ["Hola amigo", "¿Cómo estás?"]);
+});
+
+test("splitSpanishTtsText removes ignored spans wrapped in dashes before chunking", () => {
+	assert.deepEqual(splitSpanishTtsText("—english—: hola amigo", 50), [": hola amigo"]);
+	assert.deepEqual(splitSpanishTtsText("--meta-- hola\n—nota— adiós", 50), ["hola", "adiós"]);
 });
 
 test("splitSpanishTtsText splits long multi-sentence text into bounded chunks", () => {
@@ -92,6 +103,13 @@ test("shouldQueuePracticeRepeat only repeats after the final chunk when auto-rep
 	assert.equal(shouldQueuePracticeRepeat(true, 7, 8, 2, 3), false);
 	assert.equal(shouldQueuePracticeRepeat(true, 7, 7, 1, 3), false);
 	assert.equal(shouldQueuePracticeRepeat(true, 7, 7, 0, 0), false);
+});
+
+test("pause button label and title switch between pause and resume states", () => {
+	assert.equal(getPracticePauseButtonLabel(false), "⏸");
+	assert.equal(getPracticePauseButtonTitle(false), "Pause audio");
+	assert.equal(getPracticePauseButtonLabel(true), "▶");
+	assert.equal(getPracticePauseButtonTitle(true), "Resume audio");
 });
 
 test("insertImportedText replaces the current selection with imported file text", () => {

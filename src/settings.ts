@@ -4,6 +4,7 @@ import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { getDatabaseStats, redownloadDatabase } from "./dictionary/db";
 import type EspañolDiccionarioPlugin from "./main";
 import { showModelPicker } from "./ui/model-selector";
+import { DEFAULT_CHAT_FONT_SIZE_PX, MAX_CHAT_FONT_SIZE_PX, MIN_CHAT_FONT_SIZE_PX, normalizeChatFontSize } from "./ui/chat-font-size-state";
 
 export interface PluginSettings {
 	llmServerUrl: string;
@@ -19,6 +20,7 @@ export interface PluginSettings {
 	ttsPracticeAutoRepeat: boolean;
 	spanishChatSystemPrompt: string;
 	chatPromptHistory: string[];
+	chatFontSize: number;
 	chatSuggestions: [string, string, string, string];
 	notFoundPrompt: string;
 }
@@ -45,6 +47,7 @@ Prefer natural Spain Spanish vocabulary and usage. When helpful, gently correct 
 explain them briefly, and then continue the conversation.
 When the user asks for roleplay or sample dialogue, provide a clean Spanish-only dialogue block that sounds natural when read aloud, and keep explanations separate and brief unless the user asks for detailed notes.`,
 	chatPromptHistory: [],
+	chatFontSize: DEFAULT_CHAT_FONT_SIZE_PX,
 	chatSuggestions: [
 		"Tell me more about \"{word}\"",
 		"Give me example sentences using \"{word}\"",
@@ -93,6 +96,7 @@ export function normalizeSettings(loaded: unknown): PluginSettings {
 	if (Array.isArray(raw.chatPromptHistory)) {
 		settings.chatPromptHistory = raw.chatPromptHistory.filter((item): item is string => typeof item === "string");
 	}
+	settings.chatFontSize = normalizeChatFontSize(raw.chatFontSize);
 
 	if (Array.isArray(raw.chatSuggestions)) {
 		for (let i = 0; i < 4; i++) {
@@ -235,6 +239,20 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 				text.inputEl.style.width = "100%";
 			});
 
+		new Setting(containerEl)
+			.setName("Chat font size")
+			.setDesc(`Adjust the font size used in both the embedded dictionary chat and the standalone Spanish Chat view (${MIN_CHAT_FONT_SIZE_PX}–${MAX_CHAT_FONT_SIZE_PX}px).`)
+			.addSlider((slider) =>
+				slider
+					.setLimits(MIN_CHAT_FONT_SIZE_PX, MAX_CHAT_FONT_SIZE_PX, 1)
+					.setValue(this.plugin.settings.chatFontSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chatFontSize = normalizeChatFontSize(value);
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// ── Prompts ──────────────────────────────────────────────────
 
 		containerEl.createEl("h3", { text: "Prompts for word lookups" });
@@ -325,6 +343,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						this.plugin.settings.llmTemperature = DEFAULT_SETTINGS.llmTemperature;
 						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
 						this.plugin.settings.spanishChatSystemPrompt = DEFAULT_SETTINGS.spanishChatSystemPrompt;
+						this.plugin.settings.chatFontSize = DEFAULT_SETTINGS.chatFontSize;
 						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
 						this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
 						await this.plugin.saveSettings();

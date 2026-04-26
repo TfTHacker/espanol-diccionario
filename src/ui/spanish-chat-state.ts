@@ -5,6 +5,34 @@ export const DEFAULT_SPANISH_CHAT_STARTERS = [
   "Correct my Spanish gently and explain the mistakes.",
 ] as const;
 
+export function shouldSubmitSpanishChatPrompt(keyEvent: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "metaKey">): boolean {
+  return keyEvent.key === "Enter" && !keyEvent.ctrlKey && !keyEvent.altKey && !keyEvent.metaKey;
+}
+
+function wrapEnglishGlossesForTts(line: string): string {
+  const withWrappedParens = line.replace(/\s*\(([^)]*[A-Za-z][^)]*)\)/g, (_match, inner: string) => {
+    const gloss = inner.trim();
+    return gloss ? ` —${gloss}—` : "";
+  });
+
+  const englishMetaLabels = new Set([
+    "english",
+    "translation",
+    "meaning",
+    "literal translation",
+    "literal meaning",
+    "gloss",
+    "note",
+    "notes",
+    "explanation",
+  ]);
+
+  return withWrappedParens.replace(/^([^:]{1,40}):(?=\s)/, (_match, label: string) => {
+    const normalizedLabel = label.trim().toLowerCase();
+    return englishMetaLabels.has(normalizedLabel) ? `—${label.trim()}—:` : `${label}:`;
+  });
+}
+
 export function assistantMessageToPracticeText(markdown: string): string {
   if (!markdown.trim()) return "";
 
@@ -26,9 +54,7 @@ export function assistantMessageToPracticeText(markdown: string): string {
     .split("\n")
     .map((line) => {
       let normalized = line.trimEnd();
-      if (normalized.includes(":")) {
-        normalized = normalized.replace(/\s*\([^)]*[A-Za-z][^)]*\)/g, "");
-      }
+      normalized = wrapEnglishGlossesForTts(normalized);
       normalized = normalized.replace(/[“”]/g, "").replace(/[‘’]/g, "");
       return normalized;
     })
