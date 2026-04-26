@@ -1,6 +1,6 @@
 {
   "name": "espanol-diccionario",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "An Obsidian plugin for learning Spain (Castilian) Spanish with offline dictionary, audio pronunciation, and AI chat",
   "main": "main.js",
   "scripts": {
