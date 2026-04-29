@@ -5,6 +5,7 @@ import { getDatabaseStats, redownloadDatabase } from "./dictionary/db";
 import type EspañolDiccionarioPlugin from "./main";
 import { showModelPicker } from "./ui/model-selector";
 import { DEFAULT_CHAT_FONT_SIZE_PX, MAX_CHAT_FONT_SIZE_PX, MIN_CHAT_FONT_SIZE_PX, normalizeChatFontSize } from "./ui/chat-font-size-state";
+import { DEFAULT_INPUT_FONT_SIZE_PX, MAX_INPUT_FONT_SIZE_PX, MIN_INPUT_FONT_SIZE_PX, normalizeInputFontSize } from "./ui/input-font-size-state";
 
 export interface PluginSettings {
 	llmServerUrl: string;
@@ -21,6 +22,7 @@ export interface PluginSettings {
 	spanishChatSystemPrompt: string;
 	chatPromptHistory: string[];
 	chatFontSize: number;
+	inputFontSize: number;
 	chatSuggestions: [string, string, string, string];
 	notFoundPrompt: string;
 }
@@ -31,10 +33,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	llmModel: "gemma3:4b",
 	llmTemperature: 0.7,
 	systemPrompt: `You are a helpful Spanish language tutor specializing in Castilian (Spain) Spanish.
-When the user looks up a word, provide additional context, usage notes, and example
-sentences. Always use Spain Spanish conventions (vosotros, distinción, etc.).
-When explaining grammar, be clear and give practical examples. Respond in the same
-language the user writes in (English or Spanish).`,
+When the user looks up a word, explain in English with additional context, usage notes,
+and practical examples. Spanish example sentences are welcome, but explanations should
+stay in English unless the user explicitly asks for Spanish. Always use Spain Spanish
+conventions (vosotros, distinción, etc.). When explaining grammar, be clear and concise.`,
 	maxSentences: 5,
 	autoPlayAudio: false,
 	navHistory: [],
@@ -48,6 +50,7 @@ explain them briefly, and then continue the conversation.
 When the user asks for roleplay or sample dialogue, provide a clean Spanish-only dialogue block that sounds natural when read aloud, and keep explanations separate and brief unless the user asks for detailed notes.`,
 	chatPromptHistory: [],
 	chatFontSize: DEFAULT_CHAT_FONT_SIZE_PX,
+	inputFontSize: DEFAULT_INPUT_FONT_SIZE_PX,
 	chatSuggestions: [
 		"Tell me more about \"{word}\"",
 		"Give me example sentences using \"{word}\"",
@@ -97,6 +100,7 @@ export function normalizeSettings(loaded: unknown): PluginSettings {
 		settings.chatPromptHistory = raw.chatPromptHistory.filter((item): item is string => typeof item === "string");
 	}
 	settings.chatFontSize = normalizeChatFontSize(raw.chatFontSize);
+	settings.inputFontSize = normalizeInputFontSize(raw.inputFontSize);
 
 	if (Array.isArray(raw.chatSuggestions)) {
 		for (let i = 0; i < 4; i++) {
@@ -253,28 +257,28 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 					})
 			);
 
+		new Setting(containerEl)
+			.setName("Input font size")
+			.setDesc(`Adjust the text size in dictionary search, chat prompts, and TTS practice inputs (${MIN_INPUT_FONT_SIZE_PX}–${MAX_INPUT_FONT_SIZE_PX}px).`)
+			.addSlider((slider) =>
+				slider
+					.setLimits(MIN_INPUT_FONT_SIZE_PX, MAX_INPUT_FONT_SIZE_PX, 1)
+					.setValue(this.plugin.settings.inputFontSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.inputFontSize = normalizeInputFontSize(value);
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// ── Prompts ──────────────────────────────────────────────────
 
 		containerEl.createEl("h3", { text: "Prompts for word lookups" });
 
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
-			text: "Customize the prompts shown in the chat panel. Use {word} for the current word, {pos} for part of speech, and {defs} for definitions.",
+			text: "Lookup suggestions are generated dynamically from the current word, part of speech, and definitions so each word gets more relevant learning questions.",
 		});
-
-		for (let i = 0; i < 4; i++) {
-			new Setting(containerEl)
-				.setName(`Suggestion ${i + 1}`)
-				.addText((text) =>
-					text
-						.setPlaceholder(DEFAULT_SETTINGS.chatSuggestions[i])
-						.setValue(this.plugin.settings.chatSuggestions[i] || "")
-						.onChange(async (value) => {
-							this.plugin.settings.chatSuggestions[i] = value;
-							await this.plugin.saveSettings();
-						})
-				);
-		}
 
 		containerEl.createEl("h4", { text: "Not-found prompt" });
 		containerEl.createEl("p", {
@@ -344,6 +348,7 @@ export class EspañolDiccionarioSettingTab extends PluginSettingTab {
 						this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
 						this.plugin.settings.spanishChatSystemPrompt = DEFAULT_SETTINGS.spanishChatSystemPrompt;
 						this.plugin.settings.chatFontSize = DEFAULT_SETTINGS.chatFontSize;
+						this.plugin.settings.inputFontSize = DEFAULT_SETTINGS.inputFontSize;
 						this.plugin.settings.chatSuggestions = [...DEFAULT_SETTINGS.chatSuggestions];
 						this.plugin.settings.notFoundPrompt = DEFAULT_SETTINGS.notFoundPrompt;
 						await this.plugin.saveSettings();

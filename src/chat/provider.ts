@@ -5,6 +5,7 @@
 import { requestUrl, Platform } from "obsidian";
 import type { PluginSettings } from "../settings";
 import { OLLAMA_LOCAL_HOSTS } from "../constants";
+import { buildChatSystemMessage } from "./system-message";
 
 export interface ChatMessage {
 	role: "system" | "user" | "assistant";
@@ -65,9 +66,7 @@ export async function sendChatMessage(
 	const fullMessages: ChatMessage[] = [
 		{
 			role: "system",
-			content: wordContext
-				? `${systemPrompt}\n\n${wordContext}`
-				: systemPrompt,
+			content: buildChatSystemMessage(systemPrompt, wordContext),
 		},
 		...messages,
 	];
@@ -183,9 +182,7 @@ async function streamWithFetch(
 	const fullMessages: ChatMessage[] = [
 		{
 			role: "system",
-			content: wordContext
-				? `${systemPrompt}\n\n${wordContext}`
-				: systemPrompt,
+			content: buildChatSystemMessage(systemPrompt, wordContext),
 		},
 		...messages,
 	];

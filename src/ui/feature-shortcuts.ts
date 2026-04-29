@@ -1,10 +1,12 @@
 import type EspañolDiccionarioPlugin from "../main";
-import { VIEW_TYPE_DICTIONARY, VIEW_TYPE_SPANISH_CHAT, VIEW_TYPE_TTS_PRACTICE } from "../constants";
+import { VIEW_TYPE_DICTIONARY, VIEW_TYPE_SPANISH_CHAT, VIEW_TYPE_TTS_PRACTICE, VIEW_TYPE_TRANSLATOR } from "../constants";
+import { SHORTCUT_LABELS, titleWithShortcut } from "./keyboard-shortcuts";
 
 export type FeatureShortcutViewType =
 	| typeof VIEW_TYPE_DICTIONARY
 	| typeof VIEW_TYPE_SPANISH_CHAT
-	| typeof VIEW_TYPE_TTS_PRACTICE;
+	| typeof VIEW_TYPE_TTS_PRACTICE
+	| typeof VIEW_TYPE_TRANSLATOR;
 
 export interface FeatureShortcutDefinition {
 	viewType: FeatureShortcutViewType;
@@ -17,20 +19,26 @@ export const FEATURE_SHORTCUTS: FeatureShortcutDefinition[] = [
 	{
 		viewType: VIEW_TYPE_DICTIONARY,
 		label: "Dictionary",
-		title: "Open dictionary",
+		title: titleWithShortcut("Open dictionary", SHORTCUT_LABELS.dictionaryOpen),
 		icon: "🔎",
 	},
 	{
 		viewType: VIEW_TYPE_SPANISH_CHAT,
 		label: "Chat",
-		title: "Open Spanish chat",
+		title: titleWithShortcut("Open Spanish chat", SHORTCUT_LABELS.spanishChatOpen),
 		icon: "💬",
 	},
 	{
 		viewType: VIEW_TYPE_TTS_PRACTICE,
 		label: "TTS",
-		title: "Open Spanish TTS practice",
+		title: titleWithShortcut("Open Spanish TTS practice", SHORTCUT_LABELS.ttsPracticeOpen),
 		icon: "🔊",
+	},
+	{
+		viewType: VIEW_TYPE_TRANSLATOR,
+		label: "Translator",
+		title: titleWithShortcut("Open translator", SHORTCUT_LABELS.translatorOpen),
+		icon: "↔",
 	},
 ];
 
@@ -76,5 +84,9 @@ async function openFeatureShortcut(plugin: EspañolDiccionarioPlugin, viewType: 
 		await plugin.activateSpanishChatView();
 		return;
 	}
-	await plugin.activateTtsPracticeView();
+	if (viewType === VIEW_TYPE_TTS_PRACTICE) {
+		await plugin.activateTtsPracticeView();
+		return;
+	}
+	await plugin.activateTranslatorView();
 }

@@ -5,6 +5,7 @@ export const PLUGIN_ID = "espanol-diccionario";
 export const VIEW_TYPE_DICTIONARY = "espanol-diccionario-view";
 export const VIEW_TYPE_SPANISH_CHAT = "espanol-diccionario-spanish-chat";
 export const VIEW_TYPE_TTS_PRACTICE = "espanol-diccionario-tts-practice";
+export const VIEW_TYPE_TRANSLATOR = "espanol-diccionario-translator";
 export const VIEW_TYPE_WEB = "espanol-diccionario-web";
 
 // GitHub releases URL for auto-downloading database files
@@ -16,6 +17,7 @@ export const SEARCH_DEBOUNCE_MS = 300;
 export const MARKDOWN_RENDER_DEBOUNCE_MS = 80;
 export const AUDIO_LOAD_TIMEOUT_MS = 8000;
 export const TTS_PRACTICE_CHUNK_PAUSE_MS = 350;
+export const TTS_PRACTICE_COMMAND_PAUSE_MS = 1000;
 export const TTS_PRACTICE_REPEAT_DELAY_MS = 1200;
 
 // UI limits

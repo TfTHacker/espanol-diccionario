@@ -9,10 +9,12 @@ import {
 	getPracticePlaybackText,
 	getPracticePauseButtonLabel,
 	getPracticePauseButtonTitle,
+	getNextPracticeHistorySelectionIndex,
 	insertImportedText,
 	shouldQueuePracticeRepeat,
 } from "../src/ui/tts-practice-state";
-import { splitSpanishTtsText } from "../src/audio/provider";
+import { TTS_PRACTICE_COMMAND_PAUSE_MS } from "../src/constants";
+import { splitSpanishTtsPlaybackItems, splitSpanishTtsText, stripSpanishTtsMarkdown } from "../src/audio/provider";
 
 test("pushPracticeHistoryEntry deduplicates matching entries and moves newest to front", () => {
 	const history = ["hola", "adiós", "gracias"];
@@ -58,6 +60,53 @@ test("splitSpanishTtsText keeps line-break-separated sentences in separate chunk
 test("splitSpanishTtsText removes ignored spans wrapped in dashes before chunking", () => {
 	assert.deepEqual(splitSpanishTtsText("—english—: hola amigo", 50), [": hola amigo"]);
 	assert.deepEqual(splitSpanishTtsText("--meta-- hola\n—nota— adiós", 50), ["hola", "adiós"]);
+});
+
+test("splitSpanishTtsPlaybackItems converts standalone ** commands into one-second pause items", () => {
+	assert.deepEqual(splitSpanishTtsPlaybackItems("Hola ** seguimos", 50), [
+		{ type: "speech", text: "Hola" },
+		{ type: "pause", durationMs: TTS_PRACTICE_COMMAND_PAUSE_MS },
+		{ type: "speech", text: "seguimos" },
+	]);
+});
+
+test("splitSpanishTtsText omits standalone ** pause commands from Google TTS chunks", () => {
+	assert.deepEqual(splitSpanishTtsText("Hola ** seguimos", 50), ["Hola", "seguimos"]);
+});
+
+test("splitSpanishTtsPlaybackItems preserves line-break chunking around pause commands", () => {
+	assert.deepEqual(splitSpanishTtsPlaybackItems("Hola\n**\nAdiós", 50), [
+		{ type: "speech", text: "Hola" },
+		{ type: "pause", durationMs: TTS_PRACTICE_COMMAND_PAUSE_MS },
+		{ type: "speech", text: "Adiós" },
+	]);
+});
+
+test("splitSpanishTtsPlaybackItems still accepts legacy [[pause]] commands", () => {
+	assert.deepEqual(splitSpanishTtsPlaybackItems("Hola [[pause]] seguimos", 50), [
+		{ type: "speech", text: "Hola" },
+		{ type: "pause", durationMs: TTS_PRACTICE_COMMAND_PAUSE_MS },
+		{ type: "speech", text: "seguimos" },
+	]);
+});
+
+test("splitSpanishTtsText strips copied markdown while preserving readable text", () => {
+	assert.deepEqual(
+		splitSpanishTtsText("# Título\n- **Hola** [amigo](https://example.com)\n> [[Casa|la casa]] y `gracias`", 80),
+		["Título", "Hola amigo", "la casa y gracias"],
+	);
+});
+
+test("standalone ** pauses do not conflict with markdown bold markers", () => {
+	assert.deepEqual(splitSpanishTtsPlaybackItems("**Hola** ** seguimos", 50), [
+		{ type: "speech", text: "Hola" },
+		{ type: "pause", durationMs: TTS_PRACTICE_COMMAND_PAUSE_MS },
+		{ type: "speech", text: "seguimos" },
+	]);
+});
+
+test("stripSpanishTtsMarkdown removes markdown syntax without removing plain words", () => {
+	assert.equal(stripSpanishTtsMarkdown("## Hola\n1. *uno* y __dos__\n~~tres~~"), "Hola\nuno y dos\ntres");
 });
 
 test("splitSpanishTtsText splits long multi-sentence text into bounded chunks", () => {
@@ -110,6 +159,20 @@ test("pause button label and title switch between pause and resume states", () =
 	assert.equal(getPracticePauseButtonTitle(false), "Pause audio");
 	assert.equal(getPracticePauseButtonLabel(true), "▶");
 	assert.equal(getPracticePauseButtonTitle(true), "Resume audio");
+});
+
+test("history selection moves with arrow keys and wraps through entries", () => {
+	assert.equal(getNextPracticeHistorySelectionIndex(-1, 3, 1), 0);
+	assert.equal(getNextPracticeHistorySelectionIndex(-1, 3, -1), 2);
+	assert.equal(getNextPracticeHistorySelectionIndex(0, 3, 1), 1);
+	assert.equal(getNextPracticeHistorySelectionIndex(2, 3, 1), 0);
+	assert.equal(getNextPracticeHistorySelectionIndex(0, 3, -1), 2);
+	assert.equal(getNextPracticeHistorySelectionIndex(1, 3, -1), 0);
+});
+
+test("history selection returns no active entry when history is empty", () => {
+	assert.equal(getNextPracticeHistorySelectionIndex(-1, 0, 1), -1);
+	assert.equal(getNextPracticeHistorySelectionIndex(2, 0, -1), -1);
 });
 
 test("insertImportedText replaces the current selection with imported file text", () => {

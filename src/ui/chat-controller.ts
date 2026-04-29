@@ -1,14 +1,22 @@
 // src/ui/chat-controller.ts — Chat UI logic for DictionaryView
 
 import { App, MarkdownRenderer, Component } from "obsidian";
-import { streamChatMessage } from "../chat/provider";
+import { streamChatMessage, sendChatMessage } from "../chat/provider";
 import type { ChatMessage } from "../chat/provider";
 import type { DictionaryResult } from "../dictionary/data";
 import type { PluginSettings } from "../settings";
 import { MAX_CHAT_PROMPT_HISTORY, MARKDOWN_RENDER_DEBOUNCE_MS } from "../constants";
 import { scrollMessageTopIntoView } from "./chat-scroll-state";
 import { adjustChatFontSize, normalizeChatFontSize } from "./chat-font-size-state";
-import { buildChatFollowUpSuggestions } from "./chat-follow-up-state";
+import {
+	buildChatFollowUpSuggestions,
+	buildContinueSuggestionPrompt,
+	buildLookupChatSuggestions,
+	buildLookupSuggestionPrompt,
+	buildStaticLookupQuestion,
+	filterNewSuggestions,
+	parseLlmSuggestionList,
+} from "./chat-follow-up-state";
 
 /**
  * Manages the LLM chat panel within the dictionary view.
@@ -30,6 +38,7 @@ export class ChatController {
 	private chatSuggestionsContainer!: HTMLElement;
 	private isStreaming = false;
 	private isFullscreen = false;
+	private lookupSuggestionRequestId = 0;
 
 	// References needed from the view
 	private app: App;
@@ -133,6 +142,13 @@ export class ChatController {
 		}
 		this.updateChatModelLabel();
 		this.chatInput.focus();
+	}
+
+	closeChat() {
+		this.chatContainer?.classList.add("ed-hidden");
+		this.chatToggleBtn?.classList.remove("ed-nav-btn-active");
+		this.setFullscreen(false);
+		this.hideChatRecents();
 	}
 
 	updateChatModelLabel() {
@@ -251,26 +267,51 @@ export class ChatController {
 		const result = this.currentResult();
 		if (!result) return;
 
-		const { word } = result;
-		const wordStr = word.word;
-		const pos = word.pos || "";
-		const defs = result.definitions.map(d => d.definition).join("; ");
-
-		const templates = this.settings().chatSuggestions;
-		const links: string[] = [];
-
-		for (const template of templates) {
-			if (!template.trim()) continue;
-			const text = template
-				.replace(/{word}/g, wordStr)
-				.replace(/{pos}/g, pos)
-				.replace(/{defs}/g, defs);
-			links.push(text);
-		}
-
-		if (links.length === 0) return;
-
+		const requestId = ++this.lookupSuggestionRequestId;
 		container.createEl("span", { cls: "ed-suggestion-label", text: "Ask:" });
+		container.createEl("span", { cls: "ed-suggestion-loading", text: " Generating questions…" });
+
+		void this.generateLookupSuggestions(result).then((links) => {
+			if (requestId !== this.lookupSuggestionRequestId) return;
+			this.renderSuggestionLinks(container, "Ask:", links);
+		});
+	}
+
+	private async generateLookupSuggestions(result: DictionaryResult): Promise<string[]> {
+		const context = this.getSuggestionContext(result);
+		const staticQuestion = buildStaticLookupQuestion(result.word.word);
+		const fallback = buildLookupChatSuggestions(context);
+		try {
+			const response = await sendChatMessage([
+				{ role: "user", content: buildLookupSuggestionPrompt(context) },
+			], this.settings());
+			if (response.error) return fallback;
+			const generated = parseLlmSuggestionList(response.message, 3);
+			return generated.length === 3 ? [staticQuestion, ...generated] : fallback;
+		} catch {
+			return fallback;
+		}
+	}
+
+	private getSuggestionContext(result: DictionaryResult) {
+		return {
+			word: result.word.word,
+			lang: result.word.lang,
+			pos: result.word.pos,
+			definitions: result.definitions.map((definition) => definition.definition),
+		};
+	}
+
+	private getPreviousContinueQuestions(): string[] {
+		return Array.from(this.chatContainer.querySelectorAll(".ed-chat-followup-link"))
+			.map((link) => link.textContent?.trim() ?? "")
+			.filter(Boolean);
+	}
+
+	private renderSuggestionLinks(container: HTMLElement, label: string, links: string[]) {
+		container.empty();
+		if (links.length === 0) return;
+		container.createEl("span", { cls: "ed-suggestion-label", text: label });
 
 		for (let i = 0; i < links.length; i++) {
 			if (i > 0) {
@@ -440,7 +481,7 @@ export class ChatController {
 			this.messages.push({ role: "assistant", content: response.message });
 			// Final markdown render
 			await renderMarkdown();
-			this.appendFollowUpSuggestions(assistantDiv, response.message);
+			await this.appendFollowUpSuggestions(assistantDiv, response.message);
 		}
 
 		if (messagesContainer) {
@@ -459,17 +500,34 @@ export class ChatController {
 		scrollMessageTopIntoView(messagesContainer, assistantEl);
 	}
 
-	private appendFollowUpSuggestions(assistantDiv: HTMLElement, assistantMarkdown: string) {
+	private async appendFollowUpSuggestions(assistantDiv: HTMLElement, assistantMarkdown: string) {
 		const result = this.currentResult();
-		const suggestions = buildChatFollowUpSuggestions(assistantMarkdown, {
-			word: result?.word.word,
-			lang: result?.word.lang,
-			pos: result?.word.pos,
-			definitions: result?.definitions.map((definition) => definition.definition),
-		});
-		if (suggestions.length === 0) return;
+		const context = result ? this.getSuggestionContext(result) : {};
+		const previousQuestions = this.getPreviousContinueQuestions();
+		const fallback = filterNewSuggestions(buildChatFollowUpSuggestions(assistantMarkdown, context), previousQuestions, 3);
 
 		const followUps = assistantDiv.createDiv({ cls: "ed-chat-followups" });
+		followUps.createEl("span", { cls: "ed-chat-followups-label", text: "Continue:" });
+		followUps.createEl("span", { cls: "ed-suggestion-loading", text: " Generating questions…" });
+
+		let suggestions = fallback;
+		try {
+			const response = await sendChatMessage([
+				{ role: "user", content: buildContinueSuggestionPrompt(assistantMarkdown, context, previousQuestions) },
+			], this.settings());
+			if (!response.error) {
+				const generated = filterNewSuggestions(parseLlmSuggestionList(response.message, 6), previousQuestions, 3);
+				if (generated.length === 3) suggestions = generated;
+			}
+		} catch {
+			// Use deterministic fallback when the suggestion-generation call fails.
+		}
+
+		followUps.empty();
+		if (suggestions.length === 0) {
+			followUps.remove();
+			return;
+		}
 		followUps.createEl("span", { cls: "ed-chat-followups-label", text: "Continue:" });
 
 		for (const suggestion of suggestions) {

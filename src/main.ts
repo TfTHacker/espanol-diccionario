@@ -6,10 +6,11 @@ import { DictionaryView, VIEW_TYPE_ESPANOL_DICCIONARIO } from "./ui/dictionary-v
 import { shouldAutoFocusDictionarySearch } from "./ui/dictionary-focus-state";
 import { SpanishChatView } from "./ui/spanish-chat-view";
 import { TtsPracticeView, VIEW_TYPE_TTS_PRACTICE_VIEW } from "./ui/tts-practice-view";
+import { TranslatorView } from "./ui/translator-view";
 import { WebView, VIEW_TYPE_WEB } from "./ui/web-view";
 import { ModelPickerDialog } from "./ui/model-selector";
 import { initDatabase, closeDatabase } from "./dictionary/db";
-import { PLUGIN_ID, VIEW_TYPE_SPANISH_CHAT } from "./constants";
+import { PLUGIN_ID, VIEW_TYPE_SPANISH_CHAT, VIEW_TYPE_TRANSLATOR } from "./constants";
 
 export default class EspañolDiccionarioPlugin extends Plugin {
 	settings: PluginSettings = cloneDefaultSettings();
@@ -30,6 +31,10 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 			return new TtsPracticeView(leaf, this);
 		});
 
+		this.registerView(VIEW_TYPE_TRANSLATOR, (leaf) => {
+			return new TranslatorView(leaf, this);
+		});
+
 		// Register the web viewer (desktop only — uses Electron webview)
 		if (!Platform.isMobile) {
 			this.registerView(VIEW_TYPE_WEB, (leaf) => {
@@ -46,6 +51,7 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		this.addCommand({
 			id: "open-dictionary",
 			name: "Open dictionary",
+			hotkeys: [{ modifiers: ["Alt"], key: "1" }],
 			callback: () => this.activateView(),
 		});
 
@@ -58,13 +64,22 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		this.addCommand({
 			id: "open-spanish-chat",
 			name: "Open Spanish chat",
+			hotkeys: [{ modifiers: ["Alt"], key: "2" }],
 			callback: () => this.activateSpanishChatView(),
 		});
 
 		this.addCommand({
 			id: "open-tts-practice",
 			name: "Open Spanish TTS practice",
+			hotkeys: [{ modifiers: ["Alt"], key: "3" }],
 			callback: () => this.activateTtsPracticeView(),
+		});
+
+		this.addCommand({
+			id: "open-translator",
+			name: "Open translator",
+			hotkeys: [{ modifiers: ["Alt"], key: "4" }],
+			callback: () => this.activateTranslatorView(),
 		});
 
 		this.addCommand({
@@ -257,6 +272,32 @@ export default class EspañolDiccionarioPlugin extends Plugin {
 		if (leaf && leaf.view instanceof TtsPracticeView) {
 			if (typeof initialText === "string") {
 				leaf.view.setPracticeText(initialText);
+			}
+			leaf.view.focusInput();
+		}
+	}
+
+	async activateTranslatorView(initialText?: string) {
+		const { workspace } = this.app;
+
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_TRANSLATOR)[0];
+
+		if (!leaf) {
+			const newLeaf = workspace.getLeaf("tab");
+			if (newLeaf) {
+				await newLeaf.setViewState({
+					type: VIEW_TYPE_TRANSLATOR,
+					active: true,
+				});
+				leaf = newLeaf;
+			}
+		} else {
+			workspace.revealLeaf(leaf);
+		}
+
+		if (leaf && leaf.view instanceof TranslatorView) {
+			if (typeof initialText === "string") {
+				leaf.view.setInputText(initialText);
 			}
 			leaf.view.focusInput();
 		}

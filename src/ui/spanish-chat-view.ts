@@ -7,6 +7,8 @@ import { DEFAULT_SPANISH_CHAT_STARTERS, assistantMessageToPracticeText, shouldSu
 import { scrollMessageTopIntoView } from "./chat-scroll-state";
 import { adjustChatFontSize, normalizeChatFontSize } from "./chat-font-size-state";
 import { renderFeatureShortcuts } from "./feature-shortcuts";
+import { SHORTCUT_LABELS, getFeatureShortcutNumber, isAltBackspace, isPlainAltShortcut, titleWithShortcut } from "./keyboard-shortcuts";
+import { normalizeInputFontSize } from "./input-font-size-state";
 
 export class SpanishChatView extends ItemView {
 	private plugin: EspañolDiccionarioPlugin;
@@ -47,6 +49,7 @@ export class SpanishChatView extends ItemView {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.classList.add("espanol-diccionario", "ed-spanish-chat-view");
+		container.style.setProperty("--ed-input-font-size", `${normalizeInputFontSize(this.plugin.settings.inputFontSize)}px`);
 
 		const headerEl = container.createDiv({ cls: "ed-spanish-chat-header" });
 		headerEl.createEl("h2", { text: "Spanish Chat" });
@@ -65,7 +68,7 @@ export class SpanishChatView extends ItemView {
 
 		this.recentsBtnEl = toolbarActions.createEl("button", {
 			cls: "ed-chat-recents-btn",
-			attr: { type: "button", title: "Prompt history" },
+			attr: { type: "button", title: titleWithShortcut("Prompt history", SHORTCUT_LABELS.chatHistory) },
 		});
 		this.recentsBtnEl.setText("🕐");
 		this.recentsBtnEl.addEventListener("click", (evt) => {
@@ -75,7 +78,7 @@ export class SpanishChatView extends ItemView {
 
 		this.fontDownBtnEl = toolbarActions.createEl("button", {
 			cls: "ed-chat-font-btn ed-chat-font-down-btn",
-			attr: { type: "button", title: "Decrease chat font size" },
+			attr: { type: "button", title: titleWithShortcut("Decrease chat font size", SHORTCUT_LABELS.chatFontDown) },
 		});
 		this.fontDownBtnEl.setText("A−");
 		this.fontDownBtnEl.addEventListener("click", () => {
@@ -84,7 +87,7 @@ export class SpanishChatView extends ItemView {
 
 		this.fontUpBtnEl = toolbarActions.createEl("button", {
 			cls: "ed-chat-font-btn ed-chat-font-up-btn",
-			attr: { type: "button", title: "Increase chat font size" },
+			attr: { type: "button", title: titleWithShortcut("Increase chat font size", SHORTCUT_LABELS.chatFontUp) },
 		});
 		this.fontUpBtnEl.setText("A+");
 		this.fontUpBtnEl.addEventListener("click", () => {
@@ -93,7 +96,7 @@ export class SpanishChatView extends ItemView {
 
 		this.clearBtnEl = toolbarActions.createEl("button", {
 			cls: "ed-chat-clear-btn",
-			attr: { type: "button", title: "Clear conversation" },
+			attr: { type: "button", title: titleWithShortcut("Clear conversation", SHORTCUT_LABELS.chatClear) },
 		});
 		this.clearBtnEl.setText("🗑 Clear");
 		this.clearBtnEl.addEventListener("click", () => this.clearConversation());
@@ -137,7 +140,7 @@ export class SpanishChatView extends ItemView {
 		});
 
 		const actionsEl = form.createDiv({ cls: "ed-chat-actions ed-spanish-chat-actions" });
-		actionsEl.createEl("button", { cls: "ed-chat-send-btn", text: "Send", attr: { type: "submit" } });
+		actionsEl.createEl("button", { cls: "ed-chat-send-btn", text: "Send", attr: { type: "submit", title: titleWithShortcut("Send", SHORTCUT_LABELS.chatSend) } });
 		form.addEventListener("submit", (evt) => {
 			evt.preventDefault();
 			void this.sendCurrentInput();
@@ -151,6 +154,43 @@ export class SpanishChatView extends ItemView {
 				this.hidePromptHistory();
 			}
 		});
+
+		container.addEventListener("keydown", (evt: KeyboardEvent) => {
+			const featureShortcut = getFeatureShortcutNumber(evt);
+			if (featureShortcut === 1) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateView();
+			} else if (featureShortcut === 2) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateSpanishChatView();
+			} else if (featureShortcut === 3) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateTtsPracticeView();
+			} else if (featureShortcut === 4) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateTranslatorView();
+			} else if (isPlainAltShortcut(evt, "r")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.recentsBtnEl.click();
+			} else if (isPlainAltShortcut(evt, "-")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.fontDownBtnEl.click();
+			} else if (isPlainAltShortcut(evt, "=")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.fontUpBtnEl.click();
+			} else if (isAltBackspace(evt)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.clearBtnEl.click();
+			}
+		}, true);
 
 		this.updateModelLabel();
 		this.applyChatFontSize();
@@ -206,8 +246,8 @@ export class SpanishChatView extends ItemView {
 
 	private updateFontButtons() {
 		const fontSize = normalizeChatFontSize(this.plugin.settings.chatFontSize);
-		this.fontDownBtnEl?.setAttribute("title", `Decrease chat font size (${fontSize}px)`);
-		this.fontUpBtnEl?.setAttribute("title", `Increase chat font size (${fontSize}px)`);
+		this.fontDownBtnEl?.setAttribute("title", titleWithShortcut(`Decrease chat font size (${fontSize}px)`, SHORTCUT_LABELS.chatFontDown));
+		this.fontUpBtnEl?.setAttribute("title", titleWithShortcut(`Increase chat font size (${fontSize}px)`, SHORTCUT_LABELS.chatFontUp));
 	}
 
 	private async sendPrompt(prompt: string) {

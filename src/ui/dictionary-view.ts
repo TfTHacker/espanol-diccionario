@@ -15,6 +15,8 @@ import { ChatController } from "./chat-controller";
 import { buildDefinitionExplanationPrompt, buildExampleExplanationPrompt } from "./dictionary-example-chat-state";
 import { shouldAutoFocusDictionarySearch, shouldBlurDictionarySearchAfterLookup } from "./dictionary-focus-state";
 import { renderFeatureShortcuts } from "./feature-shortcuts";
+import { SHORTCUT_LABELS, getFeatureShortcutNumber, isPlainAltShortcut, titleWithShortcut } from "./keyboard-shortcuts";
+import { normalizeInputFontSize } from "./input-font-size-state";
 
 export { VIEW_TYPE_DICTIONARY as VIEW_TYPE_ESPANOL_DICCIONARIO } from "../constants";
 
@@ -64,25 +66,26 @@ export class DictionaryView extends ItemView {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.classList.add("espanol-diccionario");
+		container.style.setProperty("--ed-input-font-size", `${normalizeInputFontSize(this.plugin.settings.inputFontSize)}px`);
 
 		// === Search bar with navigation ===
 		const searchDiv = container.createDiv({ cls: "ed-search-container" });
 
 		const navDiv = searchDiv.createDiv({ cls: "ed-nav-buttons" });
 		const navButtons = {
-			back: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-back", attr: { type: "button", title: "Back (Alt+←)" } }),
-			forward: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-forward", attr: { type: "button", title: "Forward (Alt+→)" } }),
+			back: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-back", attr: { type: "button", title: titleWithShortcut("Back", SHORTCUT_LABELS.dictionaryBack) } }),
+			forward: navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-forward", attr: { type: "button", title: titleWithShortcut("Forward", SHORTCUT_LABELS.dictionaryForward) } }),
 		};
 		navButtons.back.setText("←");
 		navButtons.forward.setText("→");
 		navButtons.back.disabled = true;
 		navButtons.forward.disabled = true;
 
-		const recentsBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-recents-btn", attr: { type: "button", title: "Recent words" } });
+		const recentsBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-nav-recents-btn", attr: { type: "button", title: titleWithShortcut("Recent words", SHORTCUT_LABELS.dictionaryRecents) } });
 		recentsBtn.setText("🕐");
 		recentsBtn.disabled = true;
 
-		const chatToggleBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-chat-toggle-btn", attr: { type: "button", title: "Toggle chat" } });
+		const chatToggleBtn = navDiv.createEl("button", { cls: "ed-nav-btn ed-chat-toggle-btn", attr: { type: "button", title: titleWithShortcut("Toggle chat", SHORTCUT_LABELS.dictionaryToggleChat) } });
 		chatToggleBtn.setText("💬");
 		chatToggleBtn.addEventListener("click", () => this.chat.toggleChat());
 
@@ -94,7 +97,7 @@ export class DictionaryView extends ItemView {
 			cls: "ed-search-input",
 			attr: { placeholder: "Search a word (Spanish or English)...", autocomplete: "off", spellcheck: "false" },
 		});
-		const searchBtn = searchForm.createEl("button", { cls: "ed-search-btn", attr: { type: "submit" } });
+		const searchBtn = searchForm.createEl("button", { cls: "ed-search-btn", attr: { type: "submit", title: titleWithShortcut("Search", SHORTCUT_LABELS.dictionarySearch) } });
 		searchBtn.setText("🔍");
 
 		const typeaheadList = searchDiv.createDiv({ cls: "ed-typeahead ed-hidden" });
@@ -192,16 +195,43 @@ export class DictionaryView extends ItemView {
 			}
 		});
 
-		// Global keyboard shortcut for back/forward navigation
+		// Capture shortcuts before Obsidian/input hotkey handlers can swallow them.
 		this.containerEl.addEventListener("keydown", (evt: KeyboardEvent) => {
-			if (evt.altKey && evt.key === "ArrowLeft") {
+			const featureShortcut = getFeatureShortcutNumber(evt);
+			if (featureShortcut === 1) {
 				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateView();
+			} else if (featureShortcut === 2) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateSpanishChatView();
+			} else if (featureShortcut === 3) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateTtsPracticeView();
+			} else if (featureShortcut === 4) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateTranslatorView();
+			} else if (evt.altKey && evt.key === "ArrowLeft") {
+				evt.preventDefault();
+				evt.stopPropagation();
 				this.nav.navigateBack();
 			} else if (evt.altKey && evt.key === "ArrowRight") {
 				evt.preventDefault();
+				evt.stopPropagation();
 				this.nav.navigateForward();
+			} else if (isPlainAltShortcut(evt, "r")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				recentsBtn.click();
+			} else if (isPlainAltShortcut(evt, "c")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				chatToggleBtn.click();
 			}
-		});
+		}, true);
 
 		// Focus search input on desktop only. On mobile, auto-focusing pops the
 		// software keyboard and obscures the dictionary pane.
@@ -293,8 +323,11 @@ export class DictionaryView extends ItemView {
 	// ============================================================
 
 	private doLookup(word: string, pushHistory: boolean) {
-		const resultArea = this.containerEl.querySelector("#ed-result-area");
+		const resultArea = this.containerEl.querySelector("#ed-result-area") as HTMLElement | null;
 		if (!resultArea) return;
+
+		this.chat.closeChat();
+		resultArea.scrollTop = 0;
 
 		if (!isDatabaseReady()) {
 			resultArea.innerHTML = renderDbLoading();
@@ -311,6 +344,7 @@ export class DictionaryView extends ItemView {
 			if (result) {
 				this.currentResult = result;
 				resultArea.innerHTML = renderResult(result, this.plugin.settings.maxSentences);
+				resultArea.scrollTop = 0;
 
 				const renderedResult = resultArea.querySelector(".ed-result");
 				if (renderedResult) {
@@ -334,6 +368,7 @@ export class DictionaryView extends ItemView {
 				// Best-guess language detection for the not-found prompt
 				const langGuess = /[áéíóúñüÁÉÍÓÚÑÜ]/.test(word) ? "es" : "en";
 				resultArea.innerHTML = renderNotFound(word, langGuess);
+				resultArea.scrollTop = 0;
 				this.chatSuggestionsContainer.empty();
 				this.nav.setCurrentWord(word);
 				if (pushHistory) {

@@ -1,12 +1,13 @@
 import { FuzzySuggestModal, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 
 import type EspañolDiccionarioPlugin from "../main";
-import { playSpanishAudio, splitSpanishTtsText } from "../audio/provider";
+import { playSpanishAudio, splitSpanishTtsPlaybackItems, type SpanishTtsPlaybackItem } from "../audio/provider";
 import { MAX_TTS_PRACTICE_HISTORY, TTS_PRACTICE_CHUNK_PAUSE_MS, TTS_PRACTICE_REPEAT_DELAY_MS, VIEW_TYPE_TTS_PRACTICE as VIEW_TYPE_TTS_PRACTICE_CONST } from "../constants";
 import {
 	getPracticePlaybackText,
 	getPracticePauseButtonLabel,
 	getPracticePauseButtonTitle,
+	getNextPracticeHistorySelectionIndex,
 	insertImportedText,
 	normalizePracticeAutoRepeat,
 	normalizePracticeDraft,
@@ -15,6 +16,8 @@ import {
 	shouldQueuePracticeRepeat,
 } from "./tts-practice-state";
 import { renderFeatureShortcuts } from "./feature-shortcuts";
+import { SHORTCUT_LABELS, getFeatureShortcutNumber, isAltBackspace, isPlainAltShortcut, titleWithShortcut } from "./keyboard-shortcuts";
+import { normalizeInputFontSize } from "./input-font-size-state";
 
 export const VIEW_TYPE_TTS_PRACTICE_VIEW = VIEW_TYPE_TTS_PRACTICE_CONST;
 
@@ -36,6 +39,8 @@ export class TtsPracticeView extends ItemView {
 	private stopBtnEl!: HTMLButtonElement;
 	private repeatBtnEl!: HTMLButtonElement;
 	private statusEl!: HTMLElement;
+	private historySelectionIndex = -1;
+	private readonly historyListId = `ed-tts-history-${Math.random().toString(36).slice(2)}`;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EspañolDiccionarioPlugin) {
 		super(leaf);
@@ -62,40 +67,48 @@ export class TtsPracticeView extends ItemView {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.classList.add("espanol-diccionario", "ed-tts-practice");
+		container.style.setProperty("--ed-input-font-size", `${normalizeInputFontSize(this.plugin.settings.inputFontSize)}px`);
 
 		const toolbar = container.createDiv({ cls: "ed-tts-toolbar" });
 
-		this.playBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-play-btn", attr: { type: "button", title: "Play Spanish audio" } });
+		this.playBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-play-btn", attr: { type: "button", title: titleWithShortcut("Play Spanish audio", SHORTCUT_LABELS.ttsPlay) } });
 		this.playBtnEl.setText("▶");
 		this.playBtnEl.addEventListener("click", () => {
 			void this.handlePlay();
 		});
 
-		this.pauseBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-pause-btn", attr: { type: "button", title: "Pause audio" } });
+		this.pauseBtnEl = toolbar.createEl("button", {
+			cls: "ed-nav-btn ed-tts-pause-btn",
+			attr: {
+				type: "button",
+				title: titleWithShortcut("Pause audio", SHORTCUT_LABELS.ttsPause),
+				"aria-label": titleWithShortcut("Pause audio", SHORTCUT_LABELS.ttsPause),
+			},
+		});
 		this.pauseBtnEl.setText("⏸");
 		this.pauseBtnEl.disabled = true;
 		this.pauseBtnEl.addEventListener("click", () => {
 			void this.togglePause();
 		});
 
-		this.stopBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-stop-btn", attr: { type: "button", title: "Stop audio" } });
+		this.stopBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-stop-btn", attr: { type: "button", title: titleWithShortcut("Stop audio", SHORTCUT_LABELS.ttsStop) } });
 		this.stopBtnEl.setText("■");
 		this.stopBtnEl.disabled = true;
 		this.stopBtnEl.addEventListener("click", () => this.handleStop("Stopped."));
 
-		this.repeatBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-repeat-btn", attr: { type: "button", title: "Auto-repeat playback: off" } });
+		this.repeatBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-repeat-btn", attr: { type: "button", title: titleWithShortcut("Auto-repeat playback: off", SHORTCUT_LABELS.ttsRepeat) } });
 		this.repeatBtnEl.setText("🔁");
 		this.repeatBtnEl.addEventListener("click", () => {
 			void this.toggleAutoRepeat();
 		});
 		this.syncAutoRepeatButton();
 
-		this.historyBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-history-btn", attr: { type: "button", title: "Practice history" } });
+		this.historyBtnEl = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-history-btn", attr: { type: "button", title: titleWithShortcut("Practice history", SHORTCUT_LABELS.ttsHistory) } });
 		this.historyBtnEl.setText("🕐");
 		this.historyBtnEl.disabled = this.history.length === 0;
 		this.historyBtnEl.addEventListener("click", () => this.toggleHistory());
 
-		const clearHistoryBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-clear-history-btn", attr: { type: "button", title: "Clear history" } });
+		const clearHistoryBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-clear-history-btn", attr: { type: "button", title: titleWithShortcut("Clear history", SHORTCUT_LABELS.ttsClearHistory) } });
 		clearHistoryBtn.setText("🧹");
 		clearHistoryBtn.disabled = this.history.length === 0;
 		clearHistoryBtn.addEventListener("click", async () => {
@@ -111,7 +124,7 @@ export class TtsPracticeView extends ItemView {
 			clearHistoryBtn.disabled = true;
 		});
 
-		const clearTextBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-clear-btn", attr: { type: "button", title: "Clear text" } });
+		const clearTextBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-clear-btn", attr: { type: "button", title: titleWithShortcut("Clear text", SHORTCUT_LABELS.ttsClearText) } });
 		clearTextBtn.setText("✕");
 		clearTextBtn.addEventListener("click", () => {
 			this.textAreaEl.value = "";
@@ -120,11 +133,15 @@ export class TtsPracticeView extends ItemView {
 			this.focusInput();
 		});
 
-		const insertFileBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-insert-file-btn", attr: { type: "button", title: "Insert file into reader" } });
+		const insertFileBtn = toolbar.createEl("button", { cls: "ed-nav-btn ed-tts-insert-file-btn", attr: { type: "button", title: titleWithShortcut("Insert file into reader", SHORTCUT_LABELS.ttsInsertFile) } });
 		insertFileBtn.setText("📄");
 		insertFileBtn.addEventListener("click", () => this.openFilePicker());
 
 		this.historyDropdownEl = toolbar.createDiv({ cls: "ed-recents ed-tts-history-dropdown ed-hidden" });
+		this.historyDropdownEl.setAttribute("tabindex", "0");
+		this.historyDropdownEl.setAttribute("role", "listbox");
+		this.historyDropdownEl.setAttribute("aria-label", "Spanish TTS practice history");
+		this.historyDropdownEl.addEventListener("keydown", (evt) => this.handleHistoryKeydown(evt));
 		renderFeatureShortcuts(toolbar, this.plugin, VIEW_TYPE_TTS_PRACTICE_VIEW);
 
 		this.textAreaEl = container.createEl("textarea", {
@@ -146,10 +163,18 @@ export class TtsPracticeView extends ItemView {
 		});
 
 		this.statusEl = container.createDiv({ cls: "ed-tts-status" });
-		container.createDiv({
-			cls: "ed-tts-privacy-note",
-			text: "Audio uses Google TTS, so entered text is sent to Google for playback. Wrap notes in --double dashes-- or —em dashes— to skip them during playback.",
-		});
+		const referenceEl = container.createDiv({ cls: "ed-tts-reference", attr: { "aria-label": "TTS practice reference" } });
+		referenceEl.createDiv({ cls: "ed-tts-reference-title", text: "Reference" });
+		const referenceListEl = referenceEl.createDiv({ cls: "ed-tts-reference-list" });
+		const addReferenceItem = (shortcut: string, description: string) => {
+			const itemEl = referenceListEl.createDiv({ cls: "ed-tts-reference-item" });
+			itemEl.createEl("code", { text: shortcut });
+			itemEl.createSpan({ text: description });
+		};
+		addReferenceItem("**", "1-second pause when used by itself");
+		addReferenceItem("--note--", "skip notes or translations");
+		addReferenceItem("Markdown", "headings, bullets, links, and emphasis are cleaned before playback");
+		referenceEl.createDiv({ cls: "ed-tts-reference-note", text: "Audio uses Google TTS, so entered text is sent to Google for playback." });
 		this.setStatus("Ready.");
 
 		container.addEventListener("click", (evt) => {
@@ -158,6 +183,59 @@ export class TtsPracticeView extends ItemView {
 				this.hideHistory();
 			}
 		});
+
+		container.addEventListener("keydown", (evt: KeyboardEvent) => {
+			const featureShortcut = getFeatureShortcutNumber(evt);
+			if (featureShortcut === 1) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateView();
+			} else if (featureShortcut === 2) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateSpanishChatView();
+			} else if (featureShortcut === 3) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateTtsPracticeView();
+			} else if (featureShortcut === 4) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.plugin.activateTranslatorView();
+			} else if (isPlainAltShortcut(evt, "p")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.playBtnEl.click();
+			} else if (isPlainAltShortcut(evt, "e")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.pauseBtnEl.click();
+			} else if (isPlainAltShortcut(evt, "s")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.stopBtnEl.click();
+			} else if (isPlainAltShortcut(evt, "a")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.repeatBtnEl.click();
+			} else if (isPlainAltShortcut(evt, "r")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.historyBtnEl.click();
+			} else if (isAltBackspace(evt)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				clearHistoryBtn.click();
+			} else if (isPlainAltShortcut(evt, "c")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				clearTextBtn.click();
+			} else if (isPlainAltShortcut(evt, "f")) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				insertFileBtn.click();
+			}
+		}, true);
 
 		this.renderHistory();
 		this.focusInput();
@@ -209,8 +287,8 @@ export class TtsPracticeView extends ItemView {
 		await this.persistDraft();
 		this.renderHistory();
 
-		const chunks = splitSpanishTtsText(text);
-		if (chunks.length === 0) {
+		const playbackItems = splitSpanishTtsPlaybackItems(text);
+		if (playbackItems.length === 0) {
 			this.playInFlight = false;
 			this.playBtnEl.disabled = false;
 			this.isPaused = false;
@@ -220,13 +298,28 @@ export class TtsPracticeView extends ItemView {
 			return;
 		}
 
-		await this.playChunks(chunks, requestId);
+		await this.playChunks(playbackItems, requestId);
 	}
 
-	private async playChunks(chunks: string[], requestId: number, chunkIndex = 0): Promise<void> {
+	private async playChunks(items: SpanishTtsPlaybackItem[], requestId: number, itemIndex = 0): Promise<void> {
 		if (requestId !== this.playRequestId) return;
+		const item = items[itemIndex];
+		if (!item) return;
 
-		const audioEl = await playSpanishAudio(chunks[chunkIndex]);
+		if (item.type === "pause") {
+			this.currentAudio = null;
+			this.isPaused = false;
+			this.syncPauseButton();
+			this.setStatus(`Pausing ${Math.round(item.durationMs / 1000)} seconds…`);
+			this.playInFlight = true;
+			window.setTimeout(() => {
+				if (requestId !== this.playRequestId) return;
+				void this.playChunks(items, requestId, itemIndex + 1);
+			}, item.durationMs);
+			return;
+		}
+
+		const audioEl = await playSpanishAudio(item.text);
 		if (requestId !== this.playRequestId) {
 			this.playInFlight = false;
 			if (audioEl) {
@@ -250,8 +343,8 @@ export class TtsPracticeView extends ItemView {
 		this.currentAudio = audioEl;
 		this.isPaused = false;
 		this.syncPauseButton();
-		const isMultiChunk = chunks.length > 1;
-		this.setStatus(isMultiChunk ? `Playing audio… (${chunkIndex + 1}/${chunks.length})` : "Playing audio…");
+		const isMultiChunk = items.length > 1;
+		this.setStatus(isMultiChunk ? `Playing audio… (${itemIndex + 1}/${items.length})` : "Playing audio…");
 		this.historyBtnEl.disabled = this.history.length === 0;
 
 		audioEl.addEventListener("ended", () => {
@@ -259,16 +352,16 @@ export class TtsPracticeView extends ItemView {
 			this.currentAudio = null;
 			this.isPaused = false;
 			this.syncPauseButton();
-			if (chunkIndex < chunks.length - 1) {
+			if (itemIndex < items.length - 1) {
 				this.playInFlight = true;
 				window.setTimeout(() => {
-					void this.playChunks(chunks, requestId, chunkIndex + 1);
+					void this.playChunks(items, requestId, itemIndex + 1);
 				}, TTS_PRACTICE_CHUNK_PAUSE_MS);
 				return;
 			}
-			if (shouldQueuePracticeRepeat(this.autoRepeat, requestId, this.playRequestId, chunkIndex, chunks.length)) {
+			if (shouldQueuePracticeRepeat(this.autoRepeat, requestId, this.playRequestId, itemIndex, items.length)) {
 				this.setStatus("Repeating soon…");
-				this.queueRepeat(chunks, requestId);
+				this.queueRepeat(items, requestId);
 				return;
 			}
 			this.playBtnEl.disabled = false;
@@ -329,7 +422,7 @@ export class TtsPracticeView extends ItemView {
 		if (status) this.setStatus(status);
 	}
 
-	private queueRepeat(chunks: string[], requestId: number) {
+	private queueRepeat(items: SpanishTtsPlaybackItem[], requestId: number) {
 		this.clearRepeatTimer();
 		this.repeatTimer = window.setTimeout(() => {
 			this.repeatTimer = null;
@@ -342,7 +435,7 @@ export class TtsPracticeView extends ItemView {
 				return;
 			}
 			this.playInFlight = true;
-			void this.playChunks(chunks, requestId, 0);
+			void this.playChunks(items, requestId, 0);
 		}, TTS_PRACTICE_REPEAT_DELAY_MS);
 	}
 
@@ -376,15 +469,16 @@ export class TtsPracticeView extends ItemView {
 	private syncAutoRepeatButton() {
 		this.repeatBtnEl?.classList.toggle("ed-nav-btn-active", this.autoRepeat);
 		this.repeatBtnEl?.setAttribute("aria-pressed", this.autoRepeat ? "true" : "false");
-		this.repeatBtnEl?.setAttribute("title", this.autoRepeat ? "Auto-repeat playback: on" : "Auto-repeat playback: off");
+		this.repeatBtnEl?.setAttribute("title", titleWithShortcut(this.autoRepeat ? "Auto-repeat playback: on" : "Auto-repeat playback: off", SHORTCUT_LABELS.ttsRepeat));
 	}
 
 	private syncPauseButton() {
 		if (!this.pauseBtnEl) return;
 		this.pauseBtnEl.disabled = !this.currentAudio;
 		this.pauseBtnEl.setText(getPracticePauseButtonLabel(this.isPaused));
-		this.pauseBtnEl.setAttribute("title", getPracticePauseButtonTitle(this.isPaused));
-		this.pauseBtnEl.setAttribute("aria-label", getPracticePauseButtonTitle(this.isPaused));
+		const pauseTitle = titleWithShortcut(getPracticePauseButtonTitle(this.isPaused), SHORTCUT_LABELS.ttsPause);
+		this.pauseBtnEl.setAttribute("title", pauseTitle);
+		this.pauseBtnEl.setAttribute("aria-label", pauseTitle);
 		this.pauseBtnEl.setAttribute("aria-pressed", this.isPaused ? "true" : "false");
 		this.pauseBtnEl.classList.toggle("ed-nav-btn-active", this.isPaused);
 	}
@@ -401,17 +495,23 @@ export class TtsPracticeView extends ItemView {
 		this.renderHistory();
 		this.historyDropdownEl.classList.remove("ed-hidden");
 		this.historyBtnEl.classList.add("ed-nav-btn-active");
+		this.setHistorySelectionIndex(this.history.length > 0 ? 0 : -1);
+		this.historyDropdownEl.focus();
 	}
 
 	private hideHistory() {
 		if (!this.historyDropdownEl) return;
 		this.historyDropdownEl.classList.add("ed-hidden");
+		this.historyDropdownEl.removeAttribute("aria-activedescendant");
+		this.historySelectionIndex = -1;
 		this.historyBtnEl?.classList.remove("ed-nav-btn-active");
 	}
 
 	private renderHistory() {
 		if (!this.historyDropdownEl) return;
 		this.historyDropdownEl.empty();
+		this.historyDropdownEl.removeAttribute("aria-activedescendant");
+		this.historySelectionIndex = -1;
 		const clearHistoryBtn = this.containerEl.querySelector<HTMLButtonElement>(".ed-tts-clear-history-btn");
 		if (clearHistoryBtn) clearHistoryBtn.disabled = this.history.length === 0;
 		this.historyBtnEl.disabled = this.history.length === 0;
@@ -421,16 +521,73 @@ export class TtsPracticeView extends ItemView {
 			return;
 		}
 
-		for (const item of this.history) {
+		this.history.forEach((item, index) => {
 			const row = this.historyDropdownEl.createDiv({ cls: "ed-recents-item ed-tts-history-item" });
+			row.setAttribute("id", `${this.historyListId}-item-${index}`);
+			row.setAttribute("role", "option");
+			row.setAttribute("aria-selected", "false");
+			row.setAttribute("tabindex", "-1");
+			row.dataset.historyIndex = String(index);
 			row.createSpan({ cls: "ed-recents-word ed-tts-history-text", text: item });
+			row.addEventListener("mouseenter", () => this.setHistorySelectionIndex(index));
 			row.addEventListener("click", () => {
-				this.setPracticeText(item);
-				this.hideHistory();
-				this.setStatus("Loaded text from history.");
-				this.focusInput();
+				this.loadHistoryItem(index);
 			});
+		});
+	}
+
+	private handleHistoryKeydown(evt: KeyboardEvent) {
+		if (this.historyDropdownEl.classList.contains("ed-hidden")) return;
+		if (evt.key === "ArrowDown" || evt.key === "ArrowUp") {
+			evt.preventDefault();
+			evt.stopPropagation();
+			const direction = evt.key === "ArrowDown" ? 1 : -1;
+			this.setHistorySelectionIndex(getNextPracticeHistorySelectionIndex(this.historySelectionIndex, this.history.length, direction));
+			return;
 		}
+		if (evt.key === "Enter") {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.loadHistoryItem(this.historySelectionIndex);
+			return;
+		}
+		if (evt.key === "Escape") {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.hideHistory();
+			this.historyBtnEl.focus();
+		}
+	}
+
+	private setHistorySelectionIndex(index: number) {
+		const rows = Array.from(this.historyDropdownEl.querySelectorAll<HTMLElement>(".ed-tts-history-item"));
+		if (rows.length === 0 || index < 0 || index >= rows.length) {
+			this.historySelectionIndex = -1;
+			this.historyDropdownEl.removeAttribute("aria-activedescendant");
+			rows.forEach((row) => {
+				row.classList.remove("ed-tts-history-item-active");
+				row.setAttribute("aria-selected", "false");
+			});
+			return;
+		}
+		this.historySelectionIndex = index;
+		rows.forEach((row, rowIndex) => {
+			const isActive = rowIndex === index;
+			row.classList.toggle("ed-tts-history-item-active", isActive);
+			row.setAttribute("aria-selected", isActive ? "true" : "false");
+		});
+		const activeRow = rows[index];
+		this.historyDropdownEl.setAttribute("aria-activedescendant", activeRow.id);
+		activeRow.scrollIntoView({ block: "nearest" });
+	}
+
+	private loadHistoryItem(index: number) {
+		const item = this.history[index];
+		if (!item) return;
+		this.setPracticeText(item);
+		this.hideHistory();
+		this.setStatus("Loaded text from history.");
+		this.focusInput();
 	}
 
 	private setStatus(message: string) {
