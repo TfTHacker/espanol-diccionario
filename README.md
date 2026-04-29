@@ -7,11 +7,15 @@ An Obsidian plugin for learning **Spain (Castilian) Spanish**, featuring:
 - **Smart lemmatization** — Conjugated forms (hablamos, están, casas) auto-resolve to the dictionary form
 - **Audio pronunciation** — Google TTS with Castilian Spanish (`es-ES`) pronunciation
 - **Dedicated Spanish chat** — Practice freeform conversation, roleplay, and dialogue generation in a standalone chat view
+- **Translator view** — Translate English ↔ Spanish, play both sides with TTS, and open a learner breakdown with Leipzig glossing
+- **AI learner prompts** — Dynamic dictionary follow-up links and translation breakdown prompts for grammar, usage, and examples
 - **Chat → TTS handoff** — Send generated assistant dialogue straight into the Spanish TTS practice view
 - **Spanish TTS practice view** — Open a dedicated reader/player for arbitrary Spanish text
 - **Selection playback** — Play only the highlighted portion of practice text when you want to focus on a phrase
 - **Practice history + draft persistence** — Reopen recent listening snippets and keep your in-progress text between sessions
 - **Import note/file text** — Pull Markdown or `.txt` file contents into the practice reader for quick listening drills
+- **Shared feature shortcuts** — Switch quickly between Dictionary (`Alt+1`), Chat (`Alt+2`), TTS (`Alt+3`), and Translator (`Alt+4`)
+- **Input and chat font sizing** — Tune readable input/chat text sizes in settings
 - **AI chat** — Ask grammar questions and get more examples via an OpenAI-compatible LLM (Ollama, OpenAI, Groq, etc.)
 - **Mobile support** — Works on Obsidian mobile (iOS + Android)
 
@@ -55,7 +59,10 @@ Open **Settings → Español Diccionario** to configure:
 | API Key | (empty) | Required for cloud providers; optional for local Ollama |
 | Model | `gemma3:4b` | Model name as recognized by your server |
 | Temperature | `0.7` | Response creativity (0–1) |
-| System Prompt | (Spanish tutor prompt) | Customizable prompt for chat |
+| System Prompt | (Spanish tutor prompt) | Customizable prompt for dictionary chat |
+| Spanish chat system prompt | (conversation tutor prompt) | Separate prompt for the standalone Spanish Chat view |
+| Chat font size | `18px` | Readability setting for embedded and standalone chat |
+| Input font size | `18px` | Readability setting for search, chat, TTS, and translator inputs |
 
 **Supported providers:** Ollama, OpenAI, Groq, Together, LM Studio, and any OpenAI-compatible API.
 
@@ -78,7 +85,7 @@ Open **Settings → Español Diccionario** to configure:
 2. Type any English or Spanish word in the search bar
 3. View definitions, IPA, example sentences
 4. Click 🔊 to hear pronunciation (Spanish words only)
-5. Expand **💬 Chat** to ask the AI about the word or grammar
+5. Use the generated **Ask** links or expand **💬 Chat** to ask the AI about the word or grammar
 
 ### Spanish chat
 
@@ -93,6 +100,17 @@ In the dedicated chat view you can:
 - send any useful assistant reply straight to TTS with **Send to TTS**
 
 This is designed to be the easiest workflow for generating dialogue and immediately practicing it as listening material.
+
+### Translator
+
+Use the command palette to open **"Español Diccionario: Open translator"** or press `Alt+4` from any plugin view.
+
+In the translator view you can:
+
+- type English or Spanish and translate it to the other language
+- click **↔ Translate** directly under the input field
+- play the input or translation with TTS
+- open **💬 Breakdown** in Spanish Chat for a concise learner explanation with Leipzig glossing
 
 ### Spanish TTS practice
 
@@ -121,8 +139,8 @@ The practice view keeps the current draft, auto-repeat preference, and a capped 
 
 - **API keys** are stored in your vault's `.obsidian/plugins/espanol-diccionario/data.json` — local to your machine, never committed to any repository
 - **Dictionary data** is processed offline from open/CC-licensed sources
-- **Audio** uses Google Translate TTS for pronunciation playback
-- **Chat** sends your messages to your configured LLM endpoint (local or cloud)
+- **Audio** uses Google Translate TTS for pronunciation, TTS practice, and translator playback
+- **Chat and translator** send your messages to your configured LLM endpoint (local or cloud)
 
 ## Data Sources
 
